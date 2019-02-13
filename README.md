@@ -5,7 +5,7 @@
 ![License CC BY-NC](https://img.shields.io/badge/license-CC_BY--NC-green.svg?style=plastic)
 
 ![Teaser image](./teaser.png)
-**Picture:** *These people are real &ndash; latent representation of them was found by using perceptual loss trick. Then this representation was moved along "smiling direction"*
+*These people are real &ndash; latent representation of them was found by using perceptual loss trick. Then this representation was moved along "smiling direction"*
 
 Short explanation of encoding approach:
 0) Original pre-trained StyleGAN generator is used for generating images
@@ -15,7 +15,7 @@ Short explanation of encoding approach:
 4) Upon completion of optimization you are able to transform your latent vector as you wish. For example you can find a "smiling direction" in your latent space, move your latent vector in this direction and transform it back to image using the generator. 
 
 **New scripts for finding your own directions will be realised soon. For now you can play with existing ones: smiling, age, gender.**
-**More examples you can find in the [Jupyter notebook](https://github.com/Puzer/stylegan/Play_with_latent_directions)**
+**More examples you can find in the [Jupyter notebook](https://github.com/Puzer/stylegan/blob/master/Play_with_latent_directions.ipynb)**
 
 ### Generating latent representation of your images
 You can generate latent representations of your own images using two scripts:
@@ -25,7 +25,7 @@ You can generate latent representations of your own images using two scripts:
 2) Find latent representation of aligned images
 > python encode_images.py aligned_images/ generated_images/ latent_representations/
 
-3) Then you can play with [Jupyter notebook](https://github.com/Puzer/stylegan/Play_with_latent_directions)
+3) Then you can play with [Jupyter notebook](https://github.com/Puzer/stylegan/blob/master/Play_with_latent_directions.ipynb)
 
 Feel free to join the research. There is still much room for improvement:
 1) Better model for perceptual loss
