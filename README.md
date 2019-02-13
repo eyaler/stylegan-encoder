@@ -5,7 +5,8 @@
 ![License CC BY-NC](https://img.shields.io/badge/license-CC_BY--NC-green.svg?style=plastic)
 
 ![Teaser image](./teaser.png)
-*These people are real &ndash; latent representation of them was found by using perceptual loss trick. Then this representation was moved along "smiling direction"*
+
+*These people are real &ndash; latent representation of them was found by using perceptual loss trick. Then this representations were moved along "smiling direction" and transformed back into images*
 
 Short explanation of encoding approach:
 0) Original pre-trained StyleGAN generator is used for generating images
