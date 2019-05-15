@@ -16,6 +16,17 @@ def load_images(images_list, img_size):
     preprocessed_images = preprocess_input(loaded_images)
     return preprocessed_images
 
+def tf_custom_l1_loss(img1,img2):
+  return tf.math.reduce_mean(tf.math.abs(img2-img1), axis=None)
+
+def tf_custom_logcosh_loss(img1,img2):
+  return tf.math.reduce_mean(tf.keras.losses.logcosh(img1,img2))
+
+# This is the perceptual model included with StyleGAN; commented to have one less dependency.
+#with dnnlib.util.open_url('https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2', cache_dir=config.cache_dir) as f:
+#  perceptual_model =  pickle.load(f)
+#def compare_images(img1,img2):
+#  return perceptual_model.get_output_for(tf.transpose(img1, perm=[0,3,2,1]), tf.transpose(img2, perm=[0,3,2,1]))
 
 class PerceptualModel:
     def __init__(self, img_size, layer=9, batch_size=1, sess=None):
@@ -24,7 +35,7 @@ class PerceptualModel:
         self.img_size = img_size
         self.layer = layer
         self.batch_size = batch_size
-
+        self.ref_img = None
         self.perceptual_model = None
         self.ref_img_features = None
         self.features_weight = None
@@ -33,18 +44,27 @@ class PerceptualModel:
     def build_perceptual_model(self, generated_image_tensor):
         vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
         self.perceptual_model = Model(vgg16.input, vgg16.layers[self.layer].output)
-        generated_image = preprocess_input(tf.image.resize_images(generated_image_tensor,
-                                                                  (self.img_size, self.img_size), method=1))
+        generated_image = tf.image.resize_nearest_neighbor(generated_image_tensor,
+                                                                  (self.img_size, self.img_size), align_corners=True)
         generated_img_features = self.perceptual_model(generated_image)
-
+        self.ref_img = tf.get_variable('ref_img', shape=generated_image.shape,
+                                                dtype='float32', initializer=tf.initializers.zeros())
         self.ref_img_features = tf.get_variable('ref_img_features', shape=generated_img_features.shape,
                                                 dtype='float32', initializer=tf.initializers.zeros())
         self.features_weight = tf.get_variable('features_weight', shape=generated_img_features.shape,
                                                dtype='float32', initializer=tf.initializers.zeros())
         self.sess.run([self.features_weight.initializer, self.features_weight.initializer])
 
-        self.loss = tf.losses.mean_squared_error(self.features_weight * self.ref_img_features,
-                                                 self.features_weight * generated_img_features) / 82890.0
+        # L1 loss on VGG16 features
+        self.loss = tf_custom_l1_loss(self.features_weight * self.ref_img_features, self.features_weight * generated_img_features)
+        # + logcosh loss on image pixels
+        self.loss += tf_custom_logcosh_loss(self.ref_img,generated_image)
+        # + MS-SIM loss on image pixels
+        self.loss += tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_img,generated_image,1))*60
+        # + extra perceptual loss on image pixels? Uncomment this and the above to try it.
+        #self.loss += compare_images(self.ref_img, generated_image)*50
+        # + L1 penalty on dlatent weights
+        self.loss += tf.math.reduce_sum(tf.math.abs(generator.dlatent_variable))/12
 
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
@@ -67,12 +87,15 @@ class PerceptualModel:
 
         self.sess.run(tf.assign(self.features_weight, weight_mask))
         self.sess.run(tf.assign(self.ref_img_features, image_features))
+        self.sess.run(tf.assign(self.ref_img, loaded_image))
 
-    def optimize(self, vars_to_optimize, iterations=500, learning_rate=1.):
+    def optimize(self, vars_to_optimize, dlatents=None, iterations=200, learning_rate=0.005):
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate,beta1=0.9, beta2=0.999, epsilon=1e-08)
         min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])
+        self.sess.run(tf.variables_initializer(optimizer.variables()))
+        if dlatents is not None:
+          generator.set_dlatents(dlatents)
         for _ in range(iterations):
             _, loss = self.sess.run([min_op, self.loss])
             yield loss
-

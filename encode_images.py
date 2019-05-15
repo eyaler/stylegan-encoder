@@ -8,7 +8,9 @@ import dnnlib
 import dnnlib.tflib as tflib
 import config
 from encoder.generator_model import Generator
-from encoder.perceptual_model import PerceptualModel
+from encoder.perceptual_model import PerceptualModel, load_images
+from keras.models import load_model
+from keras.applications.resnet50 import preprocess_input as preprocess_resnet_input
 
 URL_FFHQ = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ'  # karras2019stylegan-ffhq-1024x1024.pkl
 
@@ -29,8 +31,9 @@ def main():
 
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
-    parser.add_argument('--lr', default=1., help='Learning rate for perceptual model', type=float)
-    parser.add_argument('--iterations', default=1000, help='Number of optimization steps for each batch', type=int)
+    parser.add_argument('--lr', default=0.01, help='Learning rate for perceptual model', type=float)
+    parser.add_argument('--iterations', default=200, help='Number of optimization steps for each batch', type=int)
+    parser.add_argument('--load_resnet', default='data/finetuned_resnet.h5', help='Model to load for Resnet approximation of dlatents', type=string)
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=bool)
@@ -54,12 +57,20 @@ def main():
     perceptual_model = PerceptualModel(args.image_size, layer=9, batch_size=args.batch_size)
     perceptual_model.build_perceptual_model(generator.generated_image)
 
+    resnet_model = None
+    if os.path.exists(args.load_resnet):
+        print("Loading ResNet Model:")
+        resnet_model = load_model(args.load_resnet)
+
     # Optimize (only) dlatents by minimizing perceptual loss between reference and generated images in feature space
     for images_batch in tqdm(split_to_batches(ref_images, args.batch_size), total=len(ref_images)//args.batch_size):
         names = [os.path.splitext(os.path.basename(x))[0] for x in images_batch]
 
         perceptual_model.set_reference_images(images_batch)
-        op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
+        dlatents = None
+        if (resnet_model is not None):
+            dlatents = resnet_model.predict(preprocess_resnet_input(load_images(images_batch,image_size=image_size)))
+        op = perceptual_model.optimize(generator.dlatent_variable, dlatents=dlatents, iterations=args.iterations, learning_rate=args.lr)
         pbar = tqdm(op, leave=False, total=args.iterations)
         for loss in pbar:
             pbar.set_description(' '.join(names)+' Loss: %.2f' % loss)

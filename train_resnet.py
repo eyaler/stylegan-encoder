@@ -147,12 +147,12 @@ def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size
     assert image_size >= 224
 
     # Create a test set
-    print('Creating test set')
+    print('Creating test set:')
     np.random.seed(seed)
     W_test, X_test = generate_dataset(n=test_size, model_res=model_res, image_size=image_size, seed=seed)
 
     # Iterate on batches of size batch_size
-    print('Training model')
+    print('Generating training set:')
     patience = 0
     best_loss = np.inf
     #loss = model.evaluate(X_test, W_test)
