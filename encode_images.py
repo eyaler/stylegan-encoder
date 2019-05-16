@@ -20,7 +20,7 @@ def split_to_batches(l, n):
         yield l[i:i + n]
 
 def main():
-    parser = argparse.ArgumentParser(description='Find latent representation of reference images using perceptual loss')
+    parser = argparse.ArgumentParser(description='Find latent representation of reference images using perceptual losses', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('src_dir', help='Directory with images for encoding')
     parser.add_argument('generated_images_dir', help='Directory for storing generated images')
     parser.add_argument('dlatent_dir', help='Directory for storing dlatent representations')
