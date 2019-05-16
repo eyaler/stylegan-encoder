@@ -4,6 +4,25 @@
 ![cuDNN 7.3.1](https://img.shields.io/badge/cudnn-7.3.1-green.svg?style=plastic)
 ![License CC BY-NC](https://img.shields.io/badge/license-CC_BY--NC-green.svg?style=plastic)
 
+*This is my StyleGAN Encoder; there are many like it, but this one is mine. Thanks to @Puzer for the original, of which this is a fork, and to @SimJeg for the initial code that formed the basis of the ResNet model used here.*
+
+![Example image](./mona_example.jpg)
+
+From left to right: original image, predicted image from a ResNet pretrained on generated StyleGAN faces, and the final encoded image.
+
+What I've added:
+
+1) The ResNet encoder - train your own with *train_resnet.py*
+2) More loss functions for the iterative encoder to improve convergence speed and face quality.
+ * Original VGG loss is still present.
+ * Added image loss using logcosh.
+ * Added MS-SIM loss.
+ * Added LPIPS loss (pretrained model included with StyleGAN)
+ * Added L1 penalty on dlatents - this keeps the representation closer to StyleGAN's concept of faces.
+3) Follow @Puzer's instructions below for encoder usage, all of that still applies!
+
+---
+
 ![Teaser image](./teaser.png)
 
 *These people are real &ndash; latent representation of them was found by using perceptual loss trick. Then this representations were moved along "smiling direction" and transformed back into images*
