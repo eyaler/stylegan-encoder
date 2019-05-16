@@ -8,7 +8,7 @@ import dnnlib
 import dnnlib.tflib as tflib
 import config
 from encoder.generator_model import Generator
-from encoder.perceptual_model import PerceptualModel
+from encoder.perceptual_model import PerceptualModel, load_images
 from keras.models import load_model
 from keras.applications.resnet50 import preprocess_input as preprocess_resnet_input
 
@@ -53,7 +53,10 @@ def main():
         generator_network, discriminator_network, Gs_network = pickle.load(f)
 
     generator = Generator(Gs_network, args.batch_size, randomize_noise=args.randomize_noise)
-    perceptual_model = PerceptualModel(args.image_size, layer=9, batch_size=args.batch_size)
+
+    with dnnlib.util.open_url('https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2', cache_dir=config.cache_dir) as f:
+        perc_model =  pickle.load(f)
+    perceptual_model = PerceptualModel(args.image_size, layer=9, perc_model=perc_model, batch_size=args.batch_size)
     perceptual_model.build_perceptual_model(generator)
 
     resnet_model = None

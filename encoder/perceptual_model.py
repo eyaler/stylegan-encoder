@@ -21,24 +21,27 @@ def tf_custom_l1_loss(img1,img2):
 def tf_custom_logcosh_loss(img1,img2):
   return tf.math.reduce_mean(tf.keras.losses.logcosh(img1,img2))
 
-# This is the perceptual model included with StyleGAN; remove to have one less dependency.
-#with dnnlib.util.open_url('https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2', cache_dir=config.cache_dir) as f:
-#  perc_model =  pickle.load(f)
-#def compare_images(img1,img2):
-#  return perc_model.get_output_for(tf.transpose(img1, perm=[0,3,2,1]), tf.transpose(img2, perm=[0,3,2,1]))
-
 class PerceptualModel:
-    def __init__(self, img_size, layer=9, batch_size=1, sess=None):
+    def __init__(self, img_size, layer=9, batch_size=1, perc_model=None, sess=None):
         self.sess = tf.get_default_session() if sess is None else sess
         K.set_session(self.sess)
         self.img_size = img_size
         self.layer = layer
         self.batch_size = batch_size
+        if perc_model is not None:
+            self.perc_model = perc_model
+        else:
+            self.perc_model = None
         self.ref_img = None
         self.perceptual_model = None
         self.ref_img_features = None
         self.features_weight = None
         self.loss = None
+
+    def compare_images(self,img1,img2):
+        if self.perc_model is not None:
+            return self.perc_model.get_output_for(tf.transpose(img1, perm=[0,3,2,1]), tf.transpose(img2, perm=[0,3,2,1]))
+        return 0
 
     def build_perceptual_model(self, generator):
         generated_image_tensor = generator.generated_image
@@ -56,20 +59,22 @@ class PerceptualModel:
         self.sess.run([self.features_weight.initializer, self.features_weight.initializer])
 
         # L1 loss on VGG16 features
-        self.loss = tf_custom_l1_loss(self.features_weight * self.ref_img_features, self.features_weight * generated_img_features) * 1.5
+        self.loss = tf_custom_l1_loss(self.features_weight * self.ref_img_features, self.features_weight * generated_img_features)
         # + logcosh loss on image pixels
         self.loss += tf_custom_logcosh_loss(self.ref_img,generated_image)
         # + MS-SIM loss on image pixels
-        self.loss += tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_img,generated_image,1)) * 75
+        self.loss += tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_img,generated_image,1)) * 60
         # + extra perceptual loss on image pixels
-        #self.loss += compare_images(self.ref_img, generated_image)*50
+        if self.perc_model is not None:
+            self.loss += self.compare_images(self.ref_img, generated_image)*50
         # + L1 penalty on dlatent weights
-        self.loss += tf.math.reduce_sum(tf.math.abs(generator.dlatent_variable))/15
+        self.loss += tf.math.reduce_sum(tf.math.abs(generator.dlatent_variable))/12
 
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
         loaded_image = load_images(images_list, self.img_size)
-        image_features = self.perceptual_model.predict_on_batch(preprocess_input(loaded_image))
+        #image_features = self.perceptual_model.predict_on_batch(preprocess_input(loaded_image))
+        image_features = self.perceptual_model.predict_on_batch(loaded_image)
 
         # in case if number of images less than actual batch size
         # can be optimized further
