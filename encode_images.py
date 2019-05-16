@@ -32,7 +32,7 @@ def main():
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
     parser.add_argument('--lr', default=0.01, help='Learning rate for perceptual model', type=float)
-    parser.add_argument('--iterations', default=200, help='Number of optimization steps for each batch', type=int)
+    parser.add_argument('--iterations', default=100, help='Number of optimization steps for each batch', type=int)
     parser.add_argument('--load_resnet', default='data/finetuned_resnet.h5', help='Model to load for Resnet approximation of dlatents')
     # Loss function options
     parser.add_argument('--use_vgg_loss', default=1, help='Use VGG perceptual loss; 0 to disable, > 1 to scale.', type=float)
@@ -44,7 +44,20 @@ def main():
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=bool)
+
+    # Video params
+    parser.add_argument('--video_dir', default='videos', help='Directory for storing training videos')
+    parser.add_argument('--output_video', default=False, help='Generate videos of the optimization process', type=bool)
+    parser.add_argument('--video_codec', default='MJPG', help='FOURCC-supported video codec name')
+    parser.add_argument('--video_frame_rate', default=24, help='Video frames per second', type=int)
+    parser.add_argument('--video_size', default=512, help='Video size in pixels', type=int)
+    parser.add_argument('--video_skip', default=1, help='Only write every n frames (1 = write every frame)', type=int)
+
     args, other_args = parser.parse_known_args()
+
+    if args.output_video:
+      import cv2
+      synthesis_kwargs = dict(output_transform=dict(func=tflib.convert_images_to_uint8, nchw_to_nhwc=False), minibatch_size=args.batch_size)
 
     ref_images = [os.path.join(args.src_dir, x) for x in os.listdir(args.src_dir)]
     ref_images = list(filter(os.path.isfile, ref_images))
@@ -55,6 +68,7 @@ def main():
     os.makedirs(args.data_dir, exist_ok=True)
     os.makedirs(args.generated_images_dir, exist_ok=True)
     os.makedirs(args.dlatent_dir, exist_ok=True)
+    os.makedirs(args.video_dir, exist_ok=True)
 
     # Initialize generator and perceptual model
     tflib.init_tf()
@@ -78,6 +92,10 @@ def main():
     # Optimize (only) dlatents by minimizing perceptual loss between reference and generated images in feature space
     for images_batch in tqdm(split_to_batches(ref_images, args.batch_size), total=len(ref_images)//args.batch_size):
         names = [os.path.splitext(os.path.basename(x))[0] for x in images_batch]
+        if args.output_video:
+          video_out = {}
+          for name in names:
+            video_out[name] = cv2.VideoWriter(os.path.join(args.video_dir, f'{name}.avi'),cv2.VideoWriter_fourcc(*args.video_codec), args.video_frame_rate, (args.video_size,args.video_size))
 
         perceptual_model.set_reference_images(images_batch)
         dlatents = None
@@ -87,9 +105,19 @@ def main():
           generator.set_dlatents(dlatents)
         op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
         pbar = tqdm(op, leave=False, total=args.iterations)
+        vid_count = 0
         for loss in pbar:
             pbar.set_description(' '.join(names)+' Loss: '+str(loss))
+            if args.output_video and (vid_count % args.video_skip == 0):
+              batch_frames = Gs_network.components.synthesis.run(generator.get_dlatents(), randomize_noise=False, **synthesis_kwargs)
+              batch_frames = batch_frames.transpose((0,2,3,1))
+              for i, name in enumerate(names):
+                video_frame = PIL.Image.fromarray(batch_frames[i], 'RGB').resize((args.video_size,args.video_size),PIL.Image.LANCZOS)
+                video_out[name].write(cv2.cvtColor(np.array(video_frame).astype('uint8'), cv2.COLOR_RGB2BGR))
+
         print(' '.join(names), ' loss:', loss)
+        for name in names:
+          video_out[name].release()
 
         # Generate images from found dlatents and save them
         generated_images = generator.generate_images()
