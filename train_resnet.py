@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pickle
 import cv2
-from google.colab.patches import cv2_imshow
+#from google.colab.patches import cv2_imshow
 
 import dnnlib
 import config
