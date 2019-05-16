@@ -86,7 +86,7 @@ class PerceptualModel:
             self.loss += self.mssim_loss * tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_img,generated_image,1))
         # + extra perceptual loss on image pixels
         if self.perc_model is not None and self.lpips_loss is not None:
-            self.loss += self.lpips_loss * self.compare_images(self.ref_img, generated_image)*50
+            self.loss += self.lpips_loss * self.compare_images(self.ref_img, generated_image)
         # + L1 penalty on dlatent weights
         if self.l1_penalty is not None:
             self.loss += self.l1_penalty * tf.math.reduce_sum(tf.math.abs(generator.dlatent_variable))
