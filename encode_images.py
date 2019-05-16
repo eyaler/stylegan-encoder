@@ -88,7 +88,7 @@ def main():
         op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
         pbar = tqdm(op, leave=False, total=args.iterations)
         for loss in pbar:
-            pbar.set_description(' '.join(names)+' Loss: %.2f' % loss)
+            pbar.set_description(' '.join(names)+' Loss: '+str(loss))
         print(' '.join(names), ' loss:', loss)
 
         # Generate images from found dlatents and save them
