@@ -22,13 +22,29 @@ def tf_custom_logcosh_loss(img1,img2):
   return tf.math.reduce_mean(tf.keras.losses.logcosh(img1,img2))
 
 class PerceptualModel:
-    def __init__(self, img_size, layer=9, batch_size=1, perc_model=None, sess=None):
+    def __init__(self, args, batch_size=1, perc_model=None, sess=None):
         self.sess = tf.get_default_session() if sess is None else sess
         K.set_session(self.sess)
-        self.img_size = img_size
-        self.layer = layer
+        self.epsilon = 0.00000001
+        self.img_size = args.image_size
+        self.layer = use_vgg_layer
+        self.vgg_loss = args.use_vgg_loss
+        if (self.layer <= 0 or self.vgg_loss <= self.epsilon):
+            self.vgg_loss = None
+        self.pixel_loss = args.use_pixel_loss
+        if (self.pixel_loss <= self.epsilon):
+            self.pixel_loss = None
+        self.mssim_loss = args.use_mssim_loss
+        if (self.mssim_loss <= self.epsilon):
+            self.mssim_loss = None
+        self.lpips_loss = args.use_lpips_loss
+        if (self.lpips_loss <= self.epsilon):
+            self.lpips_loss = None
+        self.l1_penalty = args.use_l1_penalty
+        if (self.l1_penalty <= self.epsilon):
+            self.l1_penalty = None
         self.batch_size = batch_size
-        if perc_model is not None:
+        if perc_model is not None and self.lpips_loss is not None:
             self.perc_model = perc_model
         else:
             self.perc_model = None
@@ -58,17 +74,22 @@ class PerceptualModel:
                                                dtype='float32', initializer=tf.initializers.zeros())
         self.sess.run([self.features_weight.initializer, self.features_weight.initializer])
 
+        self.loss = 0
         # L1 loss on VGG16 features
-        self.loss = tf_custom_l1_loss(self.features_weight * self.ref_img_features, self.features_weight * generated_img_features)
+        if (self.vgg_loss is not None):
+            self.loss += self.vgg_loss * tf_custom_l1_loss(self.features_weight * self.ref_img_features, self.features_weight * generated_img_features)
         # + logcosh loss on image pixels
-        self.loss += tf_custom_logcosh_loss(self.ref_img,generated_image)
+        if (self.pixel_loss is not None):
+            self.loss += self.pixel_loss * tf_custom_logcosh_loss(self.ref_img,generated_image)
         # + MS-SIM loss on image pixels
-        self.loss += tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_img,generated_image,1)) * 60
+        if (self.mssim_loss is not None):
+            self.loss += self.mssim_loss * tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_img,generated_image,1))
         # + extra perceptual loss on image pixels
-        if self.perc_model is not None:
-            self.loss += self.compare_images(self.ref_img, generated_image)*50
+        if self.perc_model is not None and self.lpips_loss is not None:
+            self.loss += self.lpips_loss * self.compare_images(self.ref_img, generated_image)*50
         # + L1 penalty on dlatent weights
-        self.loss += tf.math.reduce_sum(tf.math.abs(generator.dlatent_variable))/12
+        if self.l1_penalty is not None:
+            self.loss += self.l1_penalty * tf.math.reduce_sum(tf.math.abs(generator.dlatent_variable))
 
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)

@@ -33,6 +33,13 @@ def main():
     parser.add_argument('--lr', default=0.01, help='Learning rate for perceptual model', type=float)
     parser.add_argument('--iterations', default=200, help='Number of optimization steps for each batch', type=int)
     parser.add_argument('--load_resnet', default='data/finetuned_resnet.h5', help='Model to load for Resnet approximation of dlatents')
+    # Loss function options
+    parser.add_argument('--use_vgg_loss', default=1, help='Use VGG perceptual loss; 0 to disable, > 1 to scale.', type=float)
+    parser.add_argument('--use_vgg_layer', default=9, help='Pick which VGG layer to use.', type=int)
+    parser.add_argument('--use_pixel_loss', default=1, help='Use logcosh image pixel loss; 0 to disable, > 1 to scale.', type=float)
+    parser.add_argument('--use_mssim_loss', default=60, help='Use MS-SIM perceptual loss; 0 to disable, > 1 to scale.', type=float)
+    parser.add_argument('--use_lpips_loss', default=50, help='Use LPIPS perceptual loss; 0 to disable, > 1 to scale.', type=float)
+    parser.add_argument('--use_l1_penalty', default=0.08333, help='Use L1 penalty on latents; 0 to disable, > 0 to scale.', type=float)
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=bool)
@@ -54,9 +61,11 @@ def main():
 
     generator = Generator(Gs_network, args.batch_size, randomize_noise=args.randomize_noise)
 
-    with dnnlib.util.open_url('https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2', cache_dir=config.cache_dir) as f:
-        perc_model =  pickle.load(f)
-    perceptual_model = PerceptualModel(args.image_size, layer=9, perc_model=perc_model, batch_size=args.batch_size)
+    perc_model = None
+    if (args.use_lpips_loss > 0.00000001):
+        with dnnlib.util.open_url('https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2', cache_dir=config.cache_dir) as f:
+            perc_model =  pickle.load(f)
+    perceptual_model = PerceptualModel(args, perc_model=perc_model, batch_size=args.batch_size)
     perceptual_model.build_perceptual_model(generator)
 
     resnet_model = None
