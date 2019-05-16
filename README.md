@@ -19,8 +19,74 @@ What I've added:
  * Added MS-SIM loss.
  * Added LPIPS loss (pretrained model included with StyleGAN)
  * Added L1 penalty on dlatents - this keeps the representation closer to StyleGAN's concept of faces.
-3) Follow @Puzer's instructions below for encoder usage, all of that still applies!
+3) Added support for generating **videos** of the encoding process!
+4) Follow @Puzer's instructions below for encoder usage, all of that still applies!
 
+```
+usage: encode_images.py [-h] [--data_dir DATA_DIR] [--batch_size BATCH_SIZE]
+                        [--image_size IMAGE_SIZE] [--lr LR]
+                        [--iterations ITERATIONS] [--load_resnet LOAD_RESNET]
+                        [--use_vgg_loss USE_VGG_LOSS]
+                        [--use_vgg_layer USE_VGG_LAYER]
+                        [--use_pixel_loss USE_PIXEL_LOSS]
+                        [--use_mssim_loss USE_MSSIM_LOSS]
+                        [--use_lpips_loss USE_LPIPS_LOSS]
+                        [--use_l1_penalty USE_L1_PENALTY]
+                        [--randomize_noise RANDOMIZE_NOISE]
+                        [--video_dir VIDEO_DIR] [--output_video OUTPUT_VIDEO]
+                        [--video_codec VIDEO_CODEC]
+                        [--video_frame_rate VIDEO_FRAME_RATE]
+                        [--video_size VIDEO_SIZE] [--video_skip VIDEO_SKIP]
+                        src_dir generated_images_dir dlatent_dir
+
+Find latent representation of reference images using perceptual losses
+
+positional arguments:
+  src_dir               Directory with images for encoding
+  generated_images_dir  Directory for storing generated images
+  dlatent_dir           Directory for storing dlatent representations
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --data_dir DATA_DIR   Directory for storing optional models (default: data)
+  --batch_size BATCH_SIZE
+                        Batch size for generator and perceptual model
+                        (default: 1)
+  --image_size IMAGE_SIZE
+                        Size of images for perceptual model (default: 256)
+  --lr LR               Learning rate for perceptual model (default: 0.01)
+  --iterations ITERATIONS
+                        Number of optimization steps for each batch (default: 100)
+  --load_resnet LOAD_RESNET
+                        Model to load for Resnet approximation of dlatents
+                        (default: data/finetuned_resnet.h5)
+  --use_vgg_loss USE_VGG_LOSS
+                        Use VGG perceptual loss; 0 to disable, > 1 to scale. (default: 1)
+  --use_vgg_layer USE_VGG_LAYER
+                        Pick which VGG layer to use. (default: 9)
+  --use_pixel_loss USE_PIXEL_LOSS
+                        Use logcosh image pixel loss; 0 to disable, > 1 to scale. (default: 1)
+  --use_mssim_loss USE_MSSIM_LOSS
+                        Use MS-SIM perceptual loss; 0 to disable, > 1 to scale. (default: 60)
+  --use_lpips_loss USE_LPIPS_LOSS
+                        Use LPIPS perceptual loss; 0 to disable, > 1 to scale. (default: 50)
+  --use_l1_penalty USE_L1_PENALTY
+                        Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 0.08333)
+  --randomize_noise RANDOMIZE_NOISE
+                        Add noise to dlatents during optimization (default: False)
+  --video_dir VIDEO_DIR
+                        Directory for storing training videos (default: videos)
+  --output_video OUTPUT_VIDEO
+                        Generate videos of the optimization process (default: False)
+  --video_codec VIDEO_CODEC
+                        FOURCC-supported video codec name (default: MJPG)
+  --video_frame_rate VIDEO_FRAME_RATE
+                        Video frames per second (default: 24)
+  --video_size VIDEO_SIZE
+                        Video size in pixels (default: 512)
+  --video_skip VIDEO_SKIP
+                        Only write every n frames (1 = write every frame) (default: 1)
+```
 ---
 
 ![Teaser image](./teaser.png)
