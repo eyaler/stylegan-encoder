@@ -27,7 +27,7 @@ class PerceptualModel:
         K.set_session(self.sess)
         self.epsilon = 0.00000001
         self.img_size = args.image_size
-        self.layer = use_vgg_layer
+        self.layer = args.use_vgg_layer
         self.vgg_loss = args.use_vgg_loss
         if (self.layer <= 0 or self.vgg_loss <= self.epsilon):
             self.vgg_loss = None
