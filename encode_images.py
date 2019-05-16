@@ -31,6 +31,7 @@ def main():
 
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
+    parser.add_argument('--resnet_image_size', default=256, help='Size of images for the Resnet model', type=int)
     parser.add_argument('--lr', default=0.01, help='Learning rate for perceptual model', type=float)
     parser.add_argument('--iterations', default=100, help='Number of optimization steps for each batch', type=int)
     parser.add_argument('--load_resnet', default='data/finetuned_resnet.h5', help='Model to load for Resnet approximation of dlatents')
@@ -100,7 +101,7 @@ def main():
         perceptual_model.set_reference_images(images_batch)
         dlatents = None
         if (resnet_model is not None):
-            dlatents = resnet_model.predict(preprocess_resnet_input(load_images(images_batch,image_size=args.image_size)))
+            dlatents = resnet_model.predict(preprocess_resnet_input(load_images(images_batch,image_size=args.resnet_image_size)))
         if dlatents is not None:
           generator.set_dlatents(dlatents)
         op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
