@@ -54,6 +54,8 @@ optional arguments:
                         (default: 1)
   --image_size IMAGE_SIZE
                         Size of images for perceptual model (default: 256)
+  --resnet_image_size RESNET_IMAGE_SIZE
+                        Size of images for the Resnet model (default: 256)                        
   --lr LR               Learning rate for perceptual model (default: 0.01)
   --iterations ITERATIONS
                         Number of optimization steps for each batch (default: 100)
