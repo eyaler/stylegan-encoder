@@ -24,6 +24,7 @@ def main():
     parser.add_argument('src_dir', help='Directory with images for encoding')
     parser.add_argument('generated_images_dir', help='Directory for storing generated images')
     parser.add_argument('dlatent_dir', help='Directory for storing dlatent representations')
+    parser.add_argument('data_dir', default='data' help='Directory for storing optional models')
 
     # for now it's unclear if larger batch leads to better performance/quality
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
@@ -51,6 +52,7 @@ def main():
     if len(ref_images) == 0:
         raise Exception('%s is empty' % args.src_dir)
 
+    os.makedirs(args.data_dir, exist_ok=True)
     os.makedirs(args.generated_images_dir, exist_ok=True)
     os.makedirs(args.dlatent_dir, exist_ok=True)
 
