@@ -70,17 +70,17 @@ optional arguments:
                         Model to load for Resnet approximation of dlatents
                         (default: data/finetuned_resnet.h5)
   --use_vgg_loss USE_VGG_LOSS
-                        Use VGG perceptual loss; 0 to disable, > 1 to scale. (default: 1)
+                        Use VGG perceptual loss; 0 to disable, > 0 to scale. (default: 0.5)
   --use_vgg_layer USE_VGG_LAYER
                         Pick which VGG layer to use. (default: 9)
   --use_pixel_loss USE_PIXEL_LOSS
-                        Use logcosh image pixel loss; 0 to disable, > 1 to scale. (default: 1)
+                        Use logcosh image pixel loss; 0 to disable, > 0 to scale. (default: 1)
   --use_mssim_loss USE_MSSIM_LOSS
-                        Use MS-SIM perceptual loss; 0 to disable, > 1 to scale. (default: 60)
+                        Use MS-SIM perceptual loss; 0 to disable, > 0 to scale. (default: 100)
   --use_lpips_loss USE_LPIPS_LOSS
-                        Use LPIPS perceptual loss; 0 to disable, > 1 to scale. (default: 50)
+                        Use LPIPS perceptual loss; 0 to disable, > 0 to scale. (default: 100)
   --use_l1_penalty USE_L1_PENALTY
-                        Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 0.08333)
+                        Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 1)
   --randomize_noise RANDOMIZE_NOISE
                         Add noise to dlatents during optimization (default: False)
   --video_dir VIDEO_DIR
