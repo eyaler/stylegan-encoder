@@ -49,6 +49,7 @@ class PerceptualModel:
         else:
             self.perc_model = None
         self.ref_img = None
+        self.ref_weight = None
         self.perceptual_model = None
         self.ref_img_features = None
         self.features_weight = None
@@ -68,6 +69,8 @@ class PerceptualModel:
         generated_img_features = self.perceptual_model(generated_image)
         self.ref_img = tf.get_variable('ref_img', shape=generated_image.shape,
                                                 dtype='float32', initializer=tf.initializers.zeros())
+        self.ref_weight = tf.get_variable('ref_weight', shape=generated_image.shape,
+                                               dtype='float32', initializer=tf.initializers.zeros())
         self.ref_img_features = tf.get_variable('ref_img_features', shape=generated_img_features.shape,
                                                 dtype='float32', initializer=tf.initializers.zeros())
         self.features_weight = tf.get_variable('features_weight', shape=generated_img_features.shape,
@@ -80,16 +83,16 @@ class PerceptualModel:
             self.loss += self.vgg_loss * tf_custom_l1_loss(self.features_weight * self.ref_img_features, self.features_weight * generated_img_features)
         # + logcosh loss on image pixels
         if (self.pixel_loss is not None):
-            self.loss += self.pixel_loss * tf_custom_logcosh_loss(self.ref_img,generated_image)
+            self.loss += self.pixel_loss * tf_custom_logcosh_loss(self.ref_weight * self.ref_img, self.ref_weight * generated_image)
         # + MS-SIM loss on image pixels
         if (self.mssim_loss is not None):
-            self.loss += self.mssim_loss * tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_img,generated_image,1))
+            self.loss += self.mssim_loss * tf.math.reduce_mean(1-tf.image.ssim_multiscale(self.ref_weight * self.ref_img, self.ref_weight * generated_image, 1))
         # + extra perceptual loss on image pixels
         if self.perc_model is not None and self.lpips_loss is not None:
-            self.loss += self.lpips_loss * self.compare_images(self.ref_img, generated_image)
+            self.loss += self.lpips_loss * tf.math.reduce_mean(self.compare_images(self.ref_weight * self.ref_img, self.ref_weight * generated_image))
         # + L1 penalty on dlatent weights
         if self.l1_penalty is not None:
-            self.loss += self.l1_penalty * tf.math.reduce_sum(tf.math.abs(generator.dlatent_variable))
+            self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable))
 
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
@@ -100,19 +103,30 @@ class PerceptualModel:
         # in case if number of images less than actual batch size
         # can be optimized further
         weight_mask = np.ones(self.features_weight.shape)
+        image_mask = np.ones(self.ref_weight.shape)
         if len(images_list) != self.batch_size:
             features_space = list(self.features_weight.shape[1:])
             existing_features_shape = [len(images_list)] + features_space
             empty_features_shape = [self.batch_size - len(images_list)] + features_space
 
+            images_space = list(self.ref_weight.shape[1:])
+            existing_images_space = [len(images_list)] + images_space
+            empty_images_space = [self.batch_size - len(images_list)] + images_space
+
             existing_examples = np.ones(shape=existing_features_shape)
             empty_examples = np.zeros(shape=empty_features_shape)
             weight_mask = np.vstack([existing_examples, empty_examples])
 
+            existing_images = np.ones(shape=existing_images_space)
+            empty_images = np.zeros(shape=empty_images_space)
+            image_mask = np.vstack([existing_images, empty_images])
+
             image_features = np.vstack([image_features, np.zeros(empty_features_shape)])
+            loaded_image = np.vstack([loaded_image, np.zeros(empty_images_space)])
 
         self.sess.run(tf.assign(self.features_weight, weight_mask))
         self.sess.run(tf.assign(self.ref_img_features, image_features))
+        self.sess.run(tf.assign(self.ref_weight, image_mask))
         self.sess.run(tf.assign(self.ref_img, loaded_image))
 
     def optimize(self, vars_to_optimize, iterations=200, learning_rate=0.01):

@@ -42,6 +42,8 @@ class Generator:
         self.set_dlatents(self.initial_dlatents)
 
     def set_dlatents(self, dlatents):
+        if (dlatents.shape != (self.batch_size, self.model_scale, 512)):
+          dlatents = np.vstack([dlatents, np.zeros((self.batch_size-dlatents.shape[0], self.model_scale, 512))])
         assert (dlatents.shape == (self.batch_size, self.model_scale, 512))
         self.sess.run(tf.assign(self.dlatent_variable, dlatents))
 

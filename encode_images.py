@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--use_pixel_loss', default=1, help='Use logcosh image pixel loss; 0 to disable, > 1 to scale.', type=float)
     parser.add_argument('--use_mssim_loss', default=60, help='Use MS-SIM perceptual loss; 0 to disable, > 1 to scale.', type=float)
     parser.add_argument('--use_lpips_loss', default=50, help='Use LPIPS perceptual loss; 0 to disable, > 1 to scale.', type=float)
-    parser.add_argument('--use_l1_penalty', default=0.08333, help='Use L1 penalty on latents; 0 to disable, > 0 to scale.', type=float)
+    parser.add_argument('--use_l1_penalty', default=1, help='Use L1 penalty on latents; 0 to disable, > 0 to scale.', type=float)
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=bool)
@@ -103,7 +103,7 @@ def main():
         if (resnet_model is not None):
             dlatents = resnet_model.predict(preprocess_resnet_input(load_images(images_batch,image_size=args.resnet_image_size)))
         if dlatents is not None:
-          generator.set_dlatents(dlatents)
+            generator.set_dlatents(dlatents)
         op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
         pbar = tqdm(op, leave=False, total=args.iterations)
         vid_count = 0
@@ -117,8 +117,9 @@ def main():
                 video_out[name].write(cv2.cvtColor(np.array(video_frame).astype('uint8'), cv2.COLOR_RGB2BGR))
 
         print(' '.join(names), ' loss:', loss)
-        for name in names:
-          video_out[name].release()
+        if args.output_video:
+            for name in names:
+                video_out[name].release()
 
         # Generate images from found dlatents and save them
         generated_images = generator.generate_images()
