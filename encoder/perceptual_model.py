@@ -66,7 +66,7 @@ class PerceptualModel:
         self.perceptual_model = Model(vgg16.input, vgg16.layers[self.layer].output)
         generated_image = tf.image.resize_nearest_neighbor(generated_image_tensor,
                                                                   (self.img_size, self.img_size), align_corners=True)
-        generated_img_features = self.perceptual_model(generated_image)
+        generated_img_features = self.perceptual_model(preprocess_input(generated_image))
         self.ref_img = tf.get_variable('ref_img', shape=generated_image.shape,
                                                 dtype='float32', initializer=tf.initializers.zeros())
         self.ref_weight = tf.get_variable('ref_weight', shape=generated_image.shape,
@@ -97,8 +97,8 @@ class PerceptualModel:
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
         loaded_image = load_images(images_list, self.img_size)
-        #image_features = self.perceptual_model.predict_on_batch(preprocess_input(loaded_image))
-        image_features = self.perceptual_model.predict_on_batch(loaded_image)
+        image_features = self.perceptual_model.predict_on_batch(preprocess_input(loaded_image))
+        #image_features = self.perceptual_model.predict_on_batch(loaded_image)
 
         # in case if number of images less than actual batch size
         # can be optimized further
