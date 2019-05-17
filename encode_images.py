@@ -12,9 +12,6 @@ from encoder.perceptual_model import PerceptualModel, load_images
 from keras.models import load_model
 from keras.applications.resnet50 import preprocess_input as preprocess_resnet_input
 
-URL_FFHQ = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ'  # karras2019stylegan-ffhq-1024x1024.pkl
-
-
 def split_to_batches(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
@@ -25,8 +22,8 @@ def main():
     parser.add_argument('generated_images_dir', help='Directory for storing generated images')
     parser.add_argument('dlatent_dir', help='Directory for storing dlatent representations')
     parser.add_argument('--data_dir', default='data', help='Directory for storing optional models')
-
-    # for now it's unclear if larger batch leads to better performance/quality
+    parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ', help='Fetch a StyleGAN model to train on from this URL') # karras2019stylegan-ffhq-1024x1024.pkl
+    parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
 
     # Perceptual model params
@@ -73,10 +70,10 @@ def main():
 
     # Initialize generator and perceptual model
     tflib.init_tf()
-    with dnnlib.util.open_url(URL_FFHQ, cache_dir=config.cache_dir) as f:
+    with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
         generator_network, discriminator_network, Gs_network = pickle.load(f)
 
-    generator = Generator(Gs_network, args.batch_size, randomize_noise=args.randomize_noise)
+    generator = Generator(Gs_network, args.batch_size, model_res=args.model_res, randomize_noise=args.randomize_noise)
 
     perc_model = None
     if (args.use_lpips_loss > 0.00000001):

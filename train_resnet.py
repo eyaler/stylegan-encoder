@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pickle
 import cv2
-#from google.colab.patches import cv2_imshow
+import argparse
 
 import dnnlib
 import config
@@ -17,16 +17,6 @@ from keras.applications.resnet50 import ResNet50
 from keras.applications.resnet50 import preprocess_input
 from keras.layers import LocallyConnected1D, Reshape, Permute, Conv2D
 from keras.models import Sequential, load_model
-
-URL_FFHQ = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ'
-
-tflib.init_tf()
-with dnnlib.util.open_url(URL_FFHQ, cache_dir=config.cache_dir) as f:
-    generator_network, discriminator_network, Gs_network = pickle.load(f)
-
-def load_Gs():
-    tflib.init_tf()
-    return Gs_network
 
 def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=32):
     """
@@ -160,7 +150,7 @@ def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size
     while (patience <= max_patience):
         W_train = X_train = None
         W_train, X_train = generate_dataset(batch_size, model_res=model_res, image_size=image_size, seed=seed)
-        model.fit(X_train, W_train, epochs=n_epochs, batch_size=16, verbose=True)
+        model.fit(X_train, W_train, epochs=n_epochs, verbose=True)
         loss = model.evaluate(X_test, W_test)
         if loss < best_loss:
             print('New best test loss : {:.5f}'.format(loss))
@@ -172,9 +162,43 @@ def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size
         if (patience > max_patience): # When done with test set, train with it and discard.
             print('Done with current test set.')
             model.fit(X_test, W_test, epochs=n_epochs, verbose=True)
+        print('Saving model.')
         model.save(save_path)
 
-model = get_resnet_model('data/finetuned_resnet.h5', model_res=1024)
+parser = argparse.ArgumentParser(description='Train a ResNet to predict latent representations of images in a StyleGAN model from generated examples', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ', help='Fetch a StyleGAN model to train on from this URL')
+parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
+parser.add_argument('--data_dir', default='data', help='Directory for storing the ResNet model')
+parser.add_argument('--model_path', default='data/finetuned_resnet.h5', help='Save / load / create the ResNet model with this file path')
+parser.add_argument('--image_size', default=256, help='Size of images for ResNet model', type=int)
+parser.add_argument('--batch_size', default=2048, help='Batch size for training the ResNet model', type=int)
+parser.add_argument('--test_size', default=512, help='Batch size for testing the ResNet model', type=int)
+parser.add_argument('--max_patience', default=2, help='Number of iterations to wait while test loss does not improve', type=int)
+parser.add_argument('--epochs', default=2, help='Number of training epochs to run for each batch', type=int)
+parser.add_argument('--seed', default=-1, help='Pick a random seed for reproducibility (-1 for no random seed selected)', type=int)
+parser.add_argument('--loop', default=-1, help='Run this many iterations (-1 for infinite, halt with CTRL-C)', type=int)
 
-while True:
-    finetune_resnet(model, 'data/finetuned_resnet.h5', model_res=1024, image_size=256, batch_size=2048, test_size=512, max_patience=2, n_epochs=2, seed=None)
+args, other_args = parser.parse_known_args()
+
+os.makedirs(args.data_dir, exist_ok=True)
+
+if args.seed == -1:
+    args.seed = None
+
+tflib.init_tf()
+with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
+    generator_network, discriminator_network, Gs_network = pickle.load(f)
+
+def load_Gs():
+    return Gs_network
+
+model = get_resnet_model(args.model_path, model_res=args.model_res)
+
+if args.loop < 0:
+    while True:
+        finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed)
+else:
+    count = args.loop
+    while count > 0:
+        finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed)
+        count -= 1
