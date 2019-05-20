@@ -20,11 +20,14 @@ What I've added:
  * Added LPIPS loss (pretrained model included with StyleGAN)
  * Added L1 penalty on dlatents - this keeps the representation closer to StyleGAN's concept of faces.
 3) Added support for generating **videos** of the encoding process!
-4) Follow @Puzer's instructions below for encoder usage, all of that still applies!
+4) A [tutorial notebook](https://github.com/pbaylies/stylegan-encoder/blob/master/StyleGAN_Encoder_Tutorial.ipynb)!
+5) Follow @Puzer's instructions below for encoder usage, all of that still applies!
 
 ```
-usage: encode_images.py [-h] [--data_dir DATA_DIR] [--batch_size BATCH_SIZE]
-                        [--image_size IMAGE_SIZE] [--lr LR]
+usage: encode_images.py [-h] [--data_dir DATA_DIR] [--model_url MODEL_URL]
+                        [--model_res MODEL_RES] [--batch_size BATCH_SIZE]
+                        [--image_size IMAGE_SIZE]
+                        [--resnet_image_size RESNET_IMAGE_SIZE] [--lr LR]
                         [--iterations ITERATIONS] [--load_resnet LOAD_RESNET]
                         [--use_vgg_loss USE_VGG_LOSS]
                         [--use_vgg_layer USE_VGG_LAYER]
@@ -49,9 +52,13 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --data_dir DATA_DIR   Directory for storing optional models (default: data)
+  --model_url MODEL_URL
+                        Fetch a StyleGAN model to train on from this URL
+                        (default: https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ)
+  --model_res MODEL_RES
+                        The dimension of images in the StyleGAN model (default: 1024)
   --batch_size BATCH_SIZE
-                        Batch size for generator and perceptual model
-                        (default: 1)
+                        Batch size for generator and perceptual model (default: 1)
   --image_size IMAGE_SIZE
                         Size of images for perceptual model (default: 256)
   --resnet_image_size RESNET_IMAGE_SIZE
@@ -63,17 +70,17 @@ optional arguments:
                         Model to load for Resnet approximation of dlatents
                         (default: data/finetuned_resnet.h5)
   --use_vgg_loss USE_VGG_LOSS
-                        Use VGG perceptual loss; 0 to disable, > 1 to scale. (default: 1)
+                        Use VGG perceptual loss; 0 to disable, > 0 to scale. (default: 0.5)
   --use_vgg_layer USE_VGG_LAYER
                         Pick which VGG layer to use. (default: 9)
   --use_pixel_loss USE_PIXEL_LOSS
-                        Use logcosh image pixel loss; 0 to disable, > 1 to scale. (default: 1)
+                        Use logcosh image pixel loss; 0 to disable, > 0 to scale. (default: 1)
   --use_mssim_loss USE_MSSIM_LOSS
-                        Use MS-SIM perceptual loss; 0 to disable, > 1 to scale. (default: 60)
+                        Use MS-SIM perceptual loss; 0 to disable, > 0 to scale. (default: 100)
   --use_lpips_loss USE_LPIPS_LOSS
-                        Use LPIPS perceptual loss; 0 to disable, > 1 to scale. (default: 50)
+                        Use LPIPS perceptual loss; 0 to disable, > 0 to scale. (default: 100)
   --use_l1_penalty USE_L1_PENALTY
-                        Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 0.08333)
+                        Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 1)
   --randomize_noise RANDOMIZE_NOISE
                         Add noise to dlatents during optimization (default: False)
   --video_dir VIDEO_DIR
@@ -90,7 +97,44 @@ optional arguments:
                         Only write every n frames (1 = write every frame) (default: 1)
 ```
 ---
+```
+usage: train_resnet.py [-h] [--model_url MODEL_URL] [--model_res MODEL_RES]
+                       [--data_dir DATA_DIR] [--model_path MODEL_PATH]
+                       [--image_size IMAGE_SIZE] [--batch_size BATCH_SIZE]
+                       [--test_size TEST_SIZE] [--max_patience MAX_PATIENCE]
+                       [--epochs EPOCHS] [--seed SEED] [--loop LOOP]
 
+Train a ResNet to predict latent representations of images in a StyleGAN model
+from generated examples
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --model_url MODEL_URL
+                        Fetch a StyleGAN model to train on from this URL
+                        (default: https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ)
+  --model_res MODEL_RES
+                        The dimension of images in the StyleGAN model (default: 1024)
+  --data_dir DATA_DIR   Directory for storing the ResNet model (default: data)
+  --model_path MODEL_PATH
+                        Save / load / create the ResNet model with this file
+                        path (default: data/finetuned_resnet.h5)
+  --image_size IMAGE_SIZE
+                        Size of images for ResNet model (default: 256)
+  --batch_size BATCH_SIZE
+                        Batch size for training the ResNet model (default: 2048)
+  --test_size TEST_SIZE
+                        Batch size for testing the ResNet model (default: 512)
+  --max_patience MAX_PATIENCE
+                        Number of iterations to wait while test loss does not
+                        improve (default: 2)
+  --epochs EPOCHS       Number of training epochs to run for each batch
+                        (default: 2)
+  --seed SEED           Pick a random seed for reproducibility (-1 for no
+                        random seed selected) (default: -1)
+  --loop LOOP           Run this many iterations (-1 for infinite, halt with
+                        CTRL-C) (default: -1)
+```
+---
 ![Teaser image](./teaser.png)
 
 *These people are real &ndash; latent representation of them was found by using perceptual loss trick. Then this representations were moved along "smiling direction" and transformed back into images*
