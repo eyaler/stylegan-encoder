@@ -42,6 +42,8 @@ class Generator:
         self.set_dlatents(self.initial_dlatents)
 
     def set_dlatents(self, dlatents):
+        if (dlatents.shape[1] > self.model_scale):
+            dlatents = dlatents[:,:self.model_scale,:]
         if (dlatents.shape != (self.batch_size, self.model_scale, 512)):
           dlatents = np.vstack([dlatents, np.zeros((self.batch_size-dlatents.shape[0], self.model_scale, 512))])
         assert (dlatents.shape == (self.batch_size, self.model_scale, 512))
