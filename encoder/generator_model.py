@@ -27,7 +27,7 @@ class Generator:
                                        custom_inputs=[partial(create_variable_for_generator, batch_size=batch_size, model_scale=self.model_scale),
                                                       partial(create_stub, batch_size=batch_size)],
                                        structure='fixed')
-
+        self.dlatent_avg = model.get_var('dlatent_avg')
         self.sess = tf.get_default_session()
         self.graph = tf.get_default_graph()
 
@@ -51,6 +51,9 @@ class Generator:
 
     def get_dlatents(self):
         return self.sess.run(self.dlatent_variable)
+
+    def get_dlatent_avg(self):
+        return self.dlatent_avg
 
     def generate_images(self, dlatents=None):
         if dlatents:
