@@ -4,7 +4,7 @@
 ![cuDNN 7.3.1](https://img.shields.io/badge/cudnn-7.3.1-green.svg?style=plastic)
 ![License CC BY-NC](https://img.shields.io/badge/license-CC_BY--NC-green.svg?style=plastic)
 
-*This is my StyleGAN Encoder; there are many like it, but this one is mine. Thanks to @Puzer for the original, of which this is a fork, and to @SimJeg for the initial code that formed the basis of the ResNet model used here.*
+*This is my StyleGAN Encoder; there are many like it, but this one is mine. Thanks to @Puzer for the original, of which this is a fork, and to @SimJeg for the initial code that formed the basis of the ResNet model used here, and to @Pender for his fork as well!*
 
 ![Example image](./mona_example.jpg)
 
@@ -20,15 +20,18 @@ What I've added:
  * Added LPIPS loss (pretrained model included with StyleGAN)
  * Added L1 penalty on dlatents - this keeps the representation closer to StyleGAN's concept of faces.
 3) Added support for generating **videos** of the encoding process!
-4) A [tutorial notebook](https://github.com/pbaylies/stylegan-encoder/blob/master/StyleGAN_Encoder_Tutorial.ipynb)!
-5) Follow @Puzer's instructions below for encoder usage, all of that still applies!
+4) Added learning rate decay, stochastic gradient clipping, and tiled dlatents from @Pender's StyleGAN encoder fork.
+5) A [tutorial notebook](https://github.com/pbaylies/stylegan-encoder/blob/master/StyleGAN_Encoder_Tutorial.ipynb)!
+6) Follow @Puzer's instructions below for encoder usage, all of that still applies!
 
 ```
 usage: encode_images.py [-h] [--data_dir DATA_DIR] [--model_url MODEL_URL]
                         [--model_res MODEL_RES] [--batch_size BATCH_SIZE]
                         [--image_size IMAGE_SIZE]
                         [--resnet_image_size RESNET_IMAGE_SIZE] [--lr LR]
-                        [--iterations ITERATIONS] [--load_resnet LOAD_RESNET]
+                        [--decay_rate DECAY_RATE] [--iterations ITERATIONS]
+                        [--decay_steps DECAY_STEPS]
+                        [--load_resnet LOAD_RESNET]
                         [--use_vgg_loss USE_VGG_LOSS]
                         [--use_vgg_layer USE_VGG_LAYER]
                         [--use_pixel_loss USE_PIXEL_LOSS]
@@ -36,6 +39,8 @@ usage: encode_images.py [-h] [--data_dir DATA_DIR] [--model_url MODEL_URL]
                         [--use_lpips_loss USE_LPIPS_LOSS]
                         [--use_l1_penalty USE_L1_PENALTY]
                         [--randomize_noise RANDOMIZE_NOISE]
+                        [--tile_dlatents TILE_DLATENTS]
+                        [--clipping_threshold CLIPPING_THRESHOLD]
                         [--video_dir VIDEO_DIR] [--output_video OUTPUT_VIDEO]
                         [--video_codec VIDEO_CODEC]
                         [--video_frame_rate VIDEO_FRAME_RATE]
@@ -63,9 +68,13 @@ optional arguments:
                         Size of images for perceptual model (default: 256)
   --resnet_image_size RESNET_IMAGE_SIZE
                         Size of images for the Resnet model (default: 256)                        
-  --lr LR               Learning rate for perceptual model (default: 0.01)
+  --lr LR               Learning rate for perceptual model (default: 0.02)
+  --decay_rate DECAY_RATE
+                        Decay rate for learning rate (default: 0.9)
   --iterations ITERATIONS
                         Number of optimization steps for each batch (default: 100)
+  --decay_steps DECAY_STEPS
+                        Decay steps for learning rate decay (as a percent of iterations) (default: 10)
   --load_resnet LOAD_RESNET
                         Model to load for Resnet approximation of dlatents
                         (default: data/finetuned_resnet.h5)
@@ -83,6 +92,10 @@ optional arguments:
                         Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 1)
   --randomize_noise RANDOMIZE_NOISE
                         Add noise to dlatents during optimization (default: False)
+  --tile_dlatents TILE_DLATENTS
+                        Tile dlatents to use a single vector at each scale (default: False)
+  --clipping_threshold CLIPPING_THRESHOLD
+                        Stochastic clipping of gradient values outside of this threshold (default: 2.0)
   --video_dir VIDEO_DIR
                         Directory for storing training videos (default: videos)
   --output_video OUTPUT_VIDEO
