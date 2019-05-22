@@ -26,6 +26,9 @@ class PerceptualModel:
         self.sess = tf.get_default_session() if sess is None else sess
         K.set_session(self.sess)
         self.epsilon = 0.00000001
+        self.lr = args.lr
+        self.decay_rate = args.decay_rate
+        self.decay_steps = args.decay_steps
         self.img_size = args.image_size
         self.layer = args.use_vgg_layer
         self.vgg_loss = args.use_vgg_loss
@@ -61,6 +64,15 @@ class PerceptualModel:
         return 0
 
     def build_perceptual_model(self, generator):
+
+        # Learning rate
+        global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
+        incremented_global_step = tf.assign_add(global_step, 1)
+        self._reset_global_step = tf.assign(global_step, 0)
+        self.learning_rate = tf.train.exponential_decay(self.lr, incremented_global_step,
+                self.decay_steps, self.decay_rate, staircase=True)
+        self.sess.run([self._reset_global_step])
+
         generated_image_tensor = generator.generated_image
         vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
         self.perceptual_model = Model(vgg16.input, vgg16.layers[self.layer].output)
@@ -129,11 +141,13 @@ class PerceptualModel:
         self.sess.run(tf.assign(self.ref_weight, image_mask))
         self.sess.run(tf.assign(self.ref_img, loaded_image))
 
-    def optimize(self, vars_to_optimize, iterations=200, learning_rate=0.01):
+    def optimize(self, vars_to_optimize, iterations=200):
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
-        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate,beta1=0.9, beta2=0.999, epsilon=1e-08)
+        optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])
         self.sess.run(tf.variables_initializer(optimizer.variables()))
+        self.sess.run(self._reset_global_step)
+        fetch_ops = [min_op, self.loss, self.learning_rate]
         for _ in range(iterations):
-            _, loss = self.sess.run([min_op, self.loss])
-            yield loss
+            _, loss, lr = self.sess.run(fetch_ops)
+            yield {"loss":loss, "lr": lr}

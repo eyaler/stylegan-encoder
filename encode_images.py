@@ -29,9 +29,12 @@ def main():
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
     parser.add_argument('--resnet_image_size', default=256, help='Size of images for the Resnet model', type=int)
-    parser.add_argument('--lr', default=0.01, help='Learning rate for perceptual model', type=float)
+    parser.add_argument('--lr', default=0.02, help='Learning rate for perceptual model', type=float)
+    parser.add_argument('--decay_rate', default=0.9, help='Decay rate for learning rate', type=float)
     parser.add_argument('--iterations', default=100, help='Number of optimization steps for each batch', type=int)
+    parser.add_argument('--decay_steps', default=10, help='Decay steps for learning rate decay (as a percent of iterations)', type=float)
     parser.add_argument('--load_resnet', default='data/finetuned_resnet.h5', help='Model to load for Resnet approximation of dlatents')
+
     # Loss function options
     parser.add_argument('--use_vgg_loss', default=0.4, help='Use VGG perceptual loss; 0 to disable, > 0 to scale.', type=float)
     parser.add_argument('--use_vgg_layer', default=9, help='Pick which VGG layer to use.', type=int)
@@ -42,6 +45,8 @@ def main():
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=bool)
+    parser.add_argument('--tile_dlatents', default=False, help='Tile dlatents to use a single vector at each scale', type=bool)
+    parser.add_argument('--clipping_threshold', default=2.0, help='Stochastic clipping of gradient values outside of this threshold', type=float)
 
     # Video params
     parser.add_argument('--video_dir', default='videos', help='Directory for storing training videos')
@@ -52,6 +57,8 @@ def main():
     parser.add_argument('--video_skip', default=1, help='Only write every n frames (1 = write every frame)', type=int)
 
     args, other_args = parser.parse_known_args()
+
+    args.decay_steps *= 0.01 * args.iterations # Calculate steps as a percent of total iterations
 
     if args.output_video:
       import cv2
@@ -73,7 +80,7 @@ def main():
     with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
         generator_network, discriminator_network, Gs_network = pickle.load(f)
 
-    generator = Generator(Gs_network, args.batch_size, model_res=args.model_res, randomize_noise=args.randomize_noise)
+    generator = Generator(Gs_network, args.batch_size, clipping_threshold=args.clipping_threshold, tiled_dlatent=args.tile_dlatents, model_res=args.model_res, randomize_noise=args.randomize_noise)
 
     perc_model = None
     if (args.use_lpips_loss > 0.00000001):
@@ -101,24 +108,31 @@ def main():
             dlatents = resnet_model.predict(preprocess_resnet_input(load_images(images_batch,image_size=args.resnet_image_size)))
         if dlatents is not None:
             generator.set_dlatents(dlatents)
-        op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, learning_rate=args.lr)
+        op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations)
         pbar = tqdm(op, leave=False, total=args.iterations)
         vid_count = 0
-        for loss in pbar:
-            pbar.set_description(' '.join(names)+' Loss: '+str(loss))
+        best_loss = None
+        best_dlatent = None
+        for loss_dict in pbar:
+            pbar.set_description(" ".join(names) + ": " + "; ".join(["{} {:.4f}".format(k, v)
+                    for k, v in loss_dict.items()]))
+            if best_loss is None or loss_dict["loss"] < best_loss:
+                best_loss = loss_dict["loss"]
+                best_dlatent = generator.get_dlatents()
             if args.output_video and (vid_count % args.video_skip == 0):
-              batch_frames = Gs_network.components.synthesis.run(generator.get_dlatents(), randomize_noise=False, **synthesis_kwargs)
-              batch_frames = batch_frames.transpose((0,2,3,1))
+              batch_frames = generator.generate_images()
               for i, name in enumerate(names):
                 video_frame = PIL.Image.fromarray(batch_frames[i], 'RGB').resize((args.video_size,args.video_size),PIL.Image.LANCZOS)
                 video_out[name].write(cv2.cvtColor(np.array(video_frame).astype('uint8'), cv2.COLOR_RGB2BGR))
+            generator.stochastic_clip_dlatents()
+        print(" ".join(names), " Loss {:.4f}".format(best_loss))
 
-        print(' '.join(names), ' loss:', loss)
         if args.output_video:
             for name in names:
                 video_out[name].release()
 
         # Generate images from found dlatents and save them
+        generator.set_dlatents(best_dlatent)
         generated_images = generator.generate_images()
         generated_dlatents = generator.get_dlatents()
         for img_array, dlatent, img_name in zip(generated_images, generated_dlatents, names):
