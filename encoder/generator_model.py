@@ -9,16 +9,16 @@ def create_stub(name, batch_size):
     return tf.constant(0, dtype='float32', shape=(batch_size, 0))
 
 
-def create_variable_for_generator(name, batch_size, tiled_dlatent):
+def create_variable_for_generator(name, batch_size, tiled_dlatent, model_scale):
     if tiled_dlatent:
         low_dim_dlatent = tf.get_variable('learnable_dlatents',
             shape=(batch_size, 512),
             dtype='float32',
             initializer=tf.initializers.random_normal())
-        return tf.tile(tf.expand_dims(low_dim_dlatent, axis=1), [1, 18, 1])
+        return tf.tile(tf.expand_dims(low_dim_dlatent, axis=1), [1, model_scale, 1])
     else:
         return tf.get_variable('learnable_dlatents',
-            shape=(batch_size, 18, 512),
+            shape=(batch_size, model_scale, 512),
             dtype='float32',
             initializer=tf.initializers.random_normal())
 
@@ -40,7 +40,7 @@ class Generator:
             self.initial_dlatents = np.zeros((self.batch_size, self.model_scale, 512))
             model.components.synthesis.run(self.initial_dlatents,
                 randomize_noise=randomize_noise, minibatch_size=self.batch_size,
-                custom_inputs=[partial(create_variable_for_generator, batch_size=batch_size, tiled_dlatent=False),
+                custom_inputs=[partial(create_variable_for_generator, batch_size=batch_size, tiled_dlatent=False, model_scale=self.model_scale),
                                                 partial(create_stub, batch_size=batch_size)],
                 structure='fixed')
 
