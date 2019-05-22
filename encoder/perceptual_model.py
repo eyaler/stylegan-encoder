@@ -74,20 +74,23 @@ class PerceptualModel:
         self.sess.run([self._reset_global_step])
 
         generated_image_tensor = generator.generated_image
-        vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
-        self.perceptual_model = Model(vgg16.input, vgg16.layers[self.layer].output)
         generated_image = tf.image.resize_nearest_neighbor(generated_image_tensor,
                                                                   (self.img_size, self.img_size), align_corners=True)
-        generated_img_features = self.perceptual_model(preprocess_input(generated_image))
+
+        if (self.vgg_loss is not None):
+            vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
+            self.perceptual_model = Model(vgg16.input, vgg16.layers[self.layer].output)
+            generated_img_features = self.perceptual_model(preprocess_input(generated_image))
+            self.ref_img_features = tf.get_variable('ref_img_features', shape=generated_img_features.shape,
+                                                dtype='float32', initializer=tf.initializers.zeros())
+            self.features_weight = tf.get_variable('features_weight', shape=generated_img_features.shape,
+                                               dtype='float32', initializer=tf.initializers.zeros())
+            self.sess.run([self.features_weight.initializer, self.features_weight.initializer])
+
         self.ref_img = tf.get_variable('ref_img', shape=generated_image.shape,
                                                 dtype='float32', initializer=tf.initializers.zeros())
         self.ref_weight = tf.get_variable('ref_weight', shape=generated_image.shape,
                                                dtype='float32', initializer=tf.initializers.zeros())
-        self.ref_img_features = tf.get_variable('ref_img_features', shape=generated_img_features.shape,
-                                                dtype='float32', initializer=tf.initializers.zeros())
-        self.features_weight = tf.get_variable('features_weight', shape=generated_img_features.shape,
-                                               dtype='float32', initializer=tf.initializers.zeros())
-        self.sess.run([self.features_weight.initializer, self.features_weight.initializer])
 
         self.loss = 0
         # L1 loss on VGG16 features
@@ -109,35 +112,34 @@ class PerceptualModel:
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
         loaded_image = load_images(images_list, self.img_size)
-        image_features = self.perceptual_model.predict_on_batch(preprocess_input(loaded_image))
-        #image_features = self.perceptual_model.predict_on_batch(loaded_image)
+        image_features = None
+        if self.perceptual_model is not None:
+            image_features = self.perceptual_model.predict_on_batch(preprocess_input(loaded_image))
+            weight_mask = np.ones(self.features_weight.shape)
 
-        # in case if number of images less than actual batch size
-        # can be optimized further
-        weight_mask = np.ones(self.features_weight.shape)
         image_mask = np.ones(self.ref_weight.shape)
+
         if len(images_list) != self.batch_size:
-            features_space = list(self.features_weight.shape[1:])
-            existing_features_shape = [len(images_list)] + features_space
-            empty_features_shape = [self.batch_size - len(images_list)] + features_space
+            if image_features is not None:
+                features_space = list(self.features_weight.shape[1:])
+                existing_features_shape = [len(images_list)] + features_space
+                empty_features_shape = [self.batch_size - len(images_list)] + features_space
+                existing_examples = np.ones(shape=existing_features_shape)
+                empty_examples = np.zeros(shape=empty_features_shape)
+                weight_mask = np.vstack([existing_examples, empty_examples])
+                image_features = np.vstack([image_features, np.zeros(empty_features_shape)])
 
             images_space = list(self.ref_weight.shape[1:])
             existing_images_space = [len(images_list)] + images_space
             empty_images_space = [self.batch_size - len(images_list)] + images_space
-
-            existing_examples = np.ones(shape=existing_features_shape)
-            empty_examples = np.zeros(shape=empty_features_shape)
-            weight_mask = np.vstack([existing_examples, empty_examples])
-
             existing_images = np.ones(shape=existing_images_space)
             empty_images = np.zeros(shape=empty_images_space)
             image_mask = np.vstack([existing_images, empty_images])
-
-            image_features = np.vstack([image_features, np.zeros(empty_features_shape)])
             loaded_image = np.vstack([loaded_image, np.zeros(empty_images_space)])
 
-        self.sess.run(tf.assign(self.features_weight, weight_mask))
-        self.sess.run(tf.assign(self.ref_img_features, image_features))
+        if image_features is not None:
+            self.sess.run(tf.assign(self.features_weight, weight_mask))
+            self.sess.run(tf.assign(self.ref_img_features, image_features))
         self.sess.run(tf.assign(self.ref_weight, image_mask))
         self.sess.run(tf.assign(self.ref_img, loaded_image))
 
