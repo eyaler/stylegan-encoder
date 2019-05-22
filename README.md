@@ -70,11 +70,11 @@ optional arguments:
                         Model to load for Resnet approximation of dlatents
                         (default: data/finetuned_resnet.h5)
   --use_vgg_loss USE_VGG_LOSS
-                        Use VGG perceptual loss; 0 to disable, > 0 to scale. (default: 0.5)
+                        Use VGG perceptual loss; 0 to disable, > 0 to scale. (default: 0.4)
   --use_vgg_layer USE_VGG_LAYER
                         Pick which VGG layer to use. (default: 9)
   --use_pixel_loss USE_PIXEL_LOSS
-                        Use logcosh image pixel loss; 0 to disable, > 0 to scale. (default: 1)
+                        Use logcosh image pixel loss; 0 to disable, > 0 to scale. (default: 1.5)
   --use_mssim_loss USE_MSSIM_LOSS
                         Use MS-SIM perceptual loss; 0 to disable, > 0 to scale. (default: 100)
   --use_lpips_loss USE_LPIPS_LOSS
