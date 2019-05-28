@@ -519,7 +519,7 @@ class Network:
 
         for layer_name, layer_output, layer_trainables in self.list_layers():
             num_params = sum(np.prod(tfutil.shape_to_list(var.shape)) for var in layer_trainables)
-            weights = [var for var in layer_trainables if var.name.endswith("/weight:0")]
+            weights = [var for var in layer_trainables if var.name.endswith("/weight:0") or var.name.endswith("/weight_1:0")]
             weights.sort(key=lambda x: len(x.name))
             if len(weights) == 0 and len(layer_trainables) == 1:
                 weights = layer_trainables

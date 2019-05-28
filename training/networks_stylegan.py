@@ -7,6 +7,7 @@
 
 """Network architectures used in the StyleGAN paper."""
 
+import math
 import numpy as np
 import tensorflow as tf
 import dnnlib
@@ -132,7 +133,7 @@ def downscale2d(x, factor=2):
 #----------------------------------------------------------------------------
 # Get/create weight tensor for a convolutional or fully-connected layer.
 
-def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1):
+def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1, suffix=''):
     fan_in = np.prod(shape[:-1]) # [kernel, kernel, fmaps_in, fmaps_out] or [in, out]
     he_std = gain / np.sqrt(fan_in) # He init
 
@@ -146,17 +147,71 @@ def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1):
 
     # Create variable.
     init = tf.initializers.random_normal(0, init_std)
-    return tf.get_variable('weight', shape=shape, initializer=init) * runtime_coef
+    return tf.get_variable('weight' + suffix, shape=shape, initializer=init) * runtime_coef
 
 #----------------------------------------------------------------------------
-# Fully-connected layer.
+# Fully-connected layer - replace with TreeConnect
+def is_square(n):
+  return (n == int(math.sqrt(n) + 0.5)**2)
 
-def dense(x, fmaps, **kwargs):
+def conv(inp,
+        k_h,
+        k_w,
+        c_o,
+        suffix = '',
+        **kwargs):
+    # Get the number of channels in the input
+    c_i = int(inp.get_shape()[1])
+    # Convolution for a given input and kernel
+    convolve = lambda i, k: tf.nn.conv2d(i, k, [1, 1, 1, 1], padding='SAME', data_format='NCHW')
+    kernel = get_weight([k_h, k_w, c_i, c_o], suffix=suffix, **kwargs)
+    output = convolve(inp, kernel)
+    return output
+
+def real_dense(x, fmaps, **kwargs):
     if len(x.shape) > 2:
         x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
     w = get_weight([x.shape[1].value, fmaps], **kwargs)
     w = tf.cast(w, x.dtype)
     return tf.matmul(x, w)
+
+# replace dense layer with TreeConnect where possible - see https://github.com/OliverRichter/TreeConnect
+def dense(x, fmaps, **kwargs):
+    if len(x.shape) > 2:
+        x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
+    layer_size = x.get_shape().as_list()
+    layer_size = layer_size[1]
+
+    if is_square(layer_size): # work out layer dimensions
+        layer_l = int(math.sqrt(layer_size)+0.5)
+        layer_r = layer_l
+    else:
+        layer_m = math.log(math.sqrt(layer_size),2)
+        layer_l = 2**math.ceil(layer_m)
+        layer_r = layer_size // layer_l
+
+    if "tensorflow" in str(type(fmaps)):
+        fm = fmaps.value
+    else:
+        fm = int(fmaps)
+    if fm >= layer_size: # adjust channels for output size
+        fm = fm//layer_size
+        rf = 1
+    else:
+        rf = layer_size//fm
+        fm = 1
+        if rf > layer_l: # fall back to dense layer
+            return real_dense(x, fmaps, **kwargs)
+
+    x = tf.reshape(x, [tf.shape(x)[0], 1, layer_l, layer_r])
+    w = conv(x, layer_r, 1, 1, **kwargs)
+    w = tf.transpose(w, perm=[0,1,3,2])
+    if rf > 1: # reshape to use channels
+        w = tf.reshape(w, [tf.shape(x)[0], rf, layer_l // rf, layer_r])
+    w = conv(w, layer_l, 1, fm, suffix='_1', **kwargs) # add suffix to weights
+    w = tf.reshape(w, [tf.shape(x)[0], np.prod([d.value for d in w.shape[1:]])])
+    w = tf.cast(w, x.dtype)
+    return w
 
 #----------------------------------------------------------------------------
 # Convolutional layer.
