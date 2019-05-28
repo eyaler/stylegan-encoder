@@ -25,9 +25,9 @@ What I've added:
 6) Follow @Puzer's instructions below for encoder usage, all of that still applies!
 
 ```
-usage: encode_images.py [-h] [--data_dir DATA_DIR] [--model_url MODEL_URL]
-                        [--model_res MODEL_RES] [--batch_size BATCH_SIZE]
-                        [--image_size IMAGE_SIZE]
+usage: encode_images.py [-h] [--data_dir DATA_DIR] [--load_last LOAD_LAST]
+                        [--model_url MODEL_URL] [--model_res MODEL_RES]
+                        [--batch_size BATCH_SIZE] [--image_size IMAGE_SIZE]
                         [--resnet_image_size RESNET_IMAGE_SIZE] [--lr LR]
                         [--decay_rate DECAY_RATE] [--iterations ITERATIONS]
                         [--decay_steps DECAY_STEPS]
@@ -57,57 +57,34 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   --data_dir DATA_DIR   Directory for storing optional models (default: data)
-  --model_url MODEL_URL
-                        Fetch a StyleGAN model to train on from this URL
+  --load_last LOAD_LAST Start with embeddings from directory (default: )
+  --model_url MODEL_URL Fetch a StyleGAN model to train on from this URL
                         (default: https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ)
-  --model_res MODEL_RES
-                        The dimension of images in the StyleGAN model (default: 1024)
-  --batch_size BATCH_SIZE
-                        Batch size for generator and perceptual model (default: 1)
-  --image_size IMAGE_SIZE
-                        Size of images for perceptual model (default: 256)
-  --resnet_image_size RESNET_IMAGE_SIZE
-                        Size of images for the Resnet model (default: 256)                        
+  --model_res MODEL_RES The dimension of images in the StyleGAN model (default: 1024)
+  --batch_size BATCH_SIZE Batch size for generator and perceptual model (default: 1)
+  --image_size IMAGE_SIZE Size of images for perceptual model (default: 256)
+  --resnet_image_size RESNET_IMAGE_SIZE Size of images for the Resnet model (default: 256)                        
   --lr LR               Learning rate for perceptual model (default: 0.02)
-  --decay_rate DECAY_RATE
-                        Decay rate for learning rate (default: 0.9)
-  --iterations ITERATIONS
-                        Number of optimization steps for each batch (default: 100)
-  --decay_steps DECAY_STEPS
-                        Decay steps for learning rate decay (as a percent of iterations) (default: 10)
-  --load_resnet LOAD_RESNET
-                        Model to load for Resnet approximation of dlatents
+  --decay_rate DECAY_RATE Decay rate for learning rate (default: 0.9)
+  --iterations ITERATIONS Number of optimization steps for each batch (default: 100)
+  --decay_steps DECAY_STEPS Decay steps for learning rate decay (as a percent of iterations) (default: 10)
+  --load_resnet LOAD_RESNET Model to load for Resnet approximation of dlatents
                         (default: data/finetuned_resnet.h5)
-  --use_vgg_loss USE_VGG_LOSS
-                        Use VGG perceptual loss; 0 to disable, > 0 to scale. (default: 0.4)
-  --use_vgg_layer USE_VGG_LAYER
-                        Pick which VGG layer to use. (default: 9)
-  --use_pixel_loss USE_PIXEL_LOSS
-                        Use logcosh image pixel loss; 0 to disable, > 0 to scale. (default: 1.5)
-  --use_mssim_loss USE_MSSIM_LOSS
-                        Use MS-SIM perceptual loss; 0 to disable, > 0 to scale. (default: 100)
-  --use_lpips_loss USE_LPIPS_LOSS
-                        Use LPIPS perceptual loss; 0 to disable, > 0 to scale. (default: 100)
-  --use_l1_penalty USE_L1_PENALTY
-                        Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 1)
-  --randomize_noise RANDOMIZE_NOISE
-                        Add noise to dlatents during optimization (default: False)
-  --tile_dlatents TILE_DLATENTS
-                        Tile dlatents to use a single vector at each scale (default: False)
-  --clipping_threshold CLIPPING_THRESHOLD
-                        Stochastic clipping of gradient values outside of this threshold (default: 2.0)
-  --video_dir VIDEO_DIR
-                        Directory for storing training videos (default: videos)
-  --output_video OUTPUT_VIDEO
-                        Generate videos of the optimization process (default: False)
-  --video_codec VIDEO_CODEC
-                        FOURCC-supported video codec name (default: MJPG)
-  --video_frame_rate VIDEO_FRAME_RATE
-                        Video frames per second (default: 24)
-  --video_size VIDEO_SIZE
-                        Video size in pixels (default: 512)
-  --video_skip VIDEO_SKIP
-                        Only write every n frames (1 = write every frame) (default: 1)
+  --use_vgg_loss USE_VGG_LOSS Use VGG perceptual loss; 0 to disable, > 0 to scale. (default: 0.4)
+  --use_vgg_layer USE_VGG_LAYER Pick which VGG layer to use. (default: 9)
+  --use_pixel_loss USE_PIXEL_LOSS Use logcosh image pixel loss; 0 to disable, > 0 to scale. (default: 1.5)
+  --use_mssim_loss USE_MSSIM_LOSS Use MS-SIM perceptual loss; 0 to disable, > 0 to scale. (default: 100)
+  --use_lpips_loss USE_LPIPS_LOSS Use LPIPS perceptual loss; 0 to disable, > 0 to scale. (default: 100)
+  --use_l1_penalty USE_L1_PENALTY Use L1 penalty on latents; 0 to disable, > 0 to scale. (default: 1)
+  --randomize_noise RANDOMIZE_NOISE Add noise to dlatents during optimization (default: False)
+  --tile_dlatents TILE_DLATENTS Tile dlatents to use a single vector at each scale (default: False)
+  --clipping_threshold CLIPPING_THRESHOLD Stochastic clipping of gradient values outside of this threshold (default: 2.0)
+  --video_dir VIDEO_DIR Directory for storing training videos (default: videos)
+  --output_video OUTPUT_VIDEO Generate videos of the optimization process (default: False)
+  --video_codec VIDEO_CODEC FOURCC-supported video codec name (default: MJPG)
+  --video_frame_rate VIDEO_FRAME_RATE Video frames per second (default: 24)
+  --video_size VIDEO_SIZE Video size in pixels (default: 512)
+  --video_skip VIDEO_SKIP Only write every n frames (1 = write every frame) (default: 1)
 ```
 ---
 ```
@@ -146,6 +123,27 @@ optional arguments:
                         random seed selected) (default: -1)
   --loop LOOP           Run this many iterations (-1 for infinite, halt with
                         CTRL-C) (default: -1)
+```
+---
+```
+usage: align_images.py [-h] [--output_size OUTPUT_SIZE] [--x_scale X_SCALE]
+                       [--y_scale Y_SCALE] [--em_scale EM_SCALE]
+                       raw_dir aligned_dir
+
+Align faces from input images
+
+positional arguments:
+  raw_dir               Directory with raw images for face alignment
+  aligned_dir           Directory for storing aligned images
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --output_size OUTPUT_SIZE
+                        The dimension of images for input to the model
+                        (default: 1024)
+  --x_scale X_SCALE     Scaling factor for x dimension (default: 1)
+  --y_scale Y_SCALE     Scaling factor for y dimension (default: 1)
+  --em_scale EM_SCALE   Scaling factor for eye-mouth distance (default: 0.1)
 ```
 ---
 ![Teaser image](./teaser.png)
