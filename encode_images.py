@@ -22,6 +22,7 @@ def main():
     parser.add_argument('generated_images_dir', help='Directory for storing generated images')
     parser.add_argument('dlatent_dir', help='Directory for storing dlatent representations')
     parser.add_argument('--data_dir', default='data', help='Directory for storing optional models')
+    parser.add_argument('--load_last', default='', help='Start with embeddings from directory')
     parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ', help='Fetch a StyleGAN model to train on from this URL') # karras2019stylegan-ffhq-1024x1024.pkl
     parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
@@ -90,9 +91,6 @@ def main():
     perceptual_model.build_perceptual_model(generator)
 
     resnet_model = None
-    if os.path.exists(args.load_resnet):
-        print("Loading ResNet Model:")
-        resnet_model = load_model(args.load_resnet)
 
     # Optimize (only) dlatents by minimizing perceptual loss between reference and generated images in feature space
     for images_batch in tqdm(split_to_batches(ref_images, args.batch_size), total=len(ref_images)//args.batch_size):
@@ -104,8 +102,20 @@ def main():
 
         perceptual_model.set_reference_images(images_batch)
         dlatents = None
-        if (resnet_model is not None):
-            dlatents = resnet_model.predict(preprocess_resnet_input(load_images(images_batch,image_size=args.resnet_image_size)))
+        if (args.load_last != ''): # load previous dlatents for initialization
+            for name in names:
+                dl = np.expand_dims(np.load(os.path.join(args.load_last, f'{name}.npy')),axis=0)
+                if (dlatents is None):
+                    dlatents = dl
+                else:
+                    dlatents = np.vstack((acc,dl))
+        else:
+            if (resnet_model is None):
+                if os.path.exists(args.load_resnet):
+                    print("Loading ResNet Model:")
+                    resnet_model = load_model(args.load_resnet)
+            if (resnet_model is not None): # predict initial dlatents with ResNet model
+                dlatents = resnet_model.predict(preprocess_resnet_input(load_images(images_batch,image_size=args.resnet_image_size)))
         if dlatents is not None:
             generator.set_dlatents(dlatents)
         op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations)
