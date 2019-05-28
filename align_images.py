@@ -30,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--x_scale', default=1, help='Scaling factor for x dimension', type=float)
     parser.add_argument('--y_scale', default=1, help='Scaling factor for y dimension', type=float)
     parser.add_argument('--em_scale', default=0.1, help='Scaling factor for eye-mouth distance', type=float)
+    parser.add_argument('--use_alpha', default=False, help='Add an alpha channel for masking', type=bool)
 
     args, other_args = parser.parse_known_args()
 
@@ -49,7 +50,7 @@ if __name__ == "__main__":
                 try:
                     face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], i)
                     aligned_face_path = os.path.join(ALIGNED_IMAGES_DIR, face_img_name)
-                    image_align(raw_img_path, aligned_face_path, face_landmarks, output_size=args.output_size, x_scale=args.x_scale, y_scale=args.y_scale, em_scale=args.em_scale)
+                    image_align(raw_img_path, aligned_face_path, face_landmarks, output_size=args.output_size, x_scale=args.x_scale, y_scale=args.y_scale, em_scale=args.em_scale, alpha=args.use_alpha)
                 except:
                     print("Exception in face alignment!")
         except:
