@@ -12,6 +12,7 @@ import argparse
 import dnnlib
 import config
 import dnnlib.tflib as tflib
+import keras.backend as K
 
 from keras.applications.resnet50 import ResNet50
 from keras.applications.resnet50 import preprocess_input
@@ -170,6 +171,7 @@ parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGj
 parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
 parser.add_argument('--data_dir', default='data', help='Directory for storing the ResNet model')
 parser.add_argument('--model_path', default='data/finetuned_resnet.h5', help='Save / load / create the ResNet model with this file path')
+parser.add_argument('--use_fp16', default=False, help='Use 16-bit floating point', type=bool)
 parser.add_argument('--image_size', default=256, help='Size of images for ResNet model', type=int)
 parser.add_argument('--batch_size', default=2048, help='Batch size for training the ResNet model', type=int)
 parser.add_argument('--test_size', default=512, help='Batch size for testing the ResNet model', type=int)
@@ -184,6 +186,10 @@ os.makedirs(args.data_dir, exist_ok=True)
 
 if args.seed == -1:
     args.seed = None
+
+if args.use_fp16:
+    K.set_floatx('float16')
+    K.set_epsilon(1e-4) 
 
 tflib.init_tf()
 with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
