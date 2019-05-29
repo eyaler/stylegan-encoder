@@ -21,8 +21,9 @@ What I've added:
  * Added L1 penalty on dlatents - this keeps the representation closer to StyleGAN's concept of faces.
 3) Added support for generating **videos** of the encoding process!
 4) Added learning rate decay, stochastic gradient clipping, and tiled dlatents from @Pender's StyleGAN encoder fork.
-5) A [tutorial notebook](https://github.com/pbaylies/stylegan-encoder/blob/master/StyleGAN_Encoder_Tutorial.ipynb)!
-6) Follow @Puzer's instructions below for encoder usage, all of that still applies!
+5) Adding experimental support for FP16 and [TreeConnect](https://github.com/OliverRichter/TreeConnect).
+6) A [tutorial notebook](https://github.com/pbaylies/stylegan-encoder/blob/master/StyleGAN_Encoder_Tutorial.ipynb)!
+7) Follow @Puzer's instructions below for encoder usage, all of that still applies!
 
 ```
 usage: encode_images.py [-h] [--data_dir DATA_DIR] [--load_last LOAD_LAST]
@@ -90,9 +91,10 @@ optional arguments:
 ```
 usage: train_resnet.py [-h] [--model_url MODEL_URL] [--model_res MODEL_RES]
                        [--data_dir DATA_DIR] [--model_path MODEL_PATH]
-                       [--image_size IMAGE_SIZE] [--batch_size BATCH_SIZE]
-                       [--test_size TEST_SIZE] [--max_patience MAX_PATIENCE]
-                       [--epochs EPOCHS] [--seed SEED] [--loop LOOP]
+                       [--use_fp16 USE_FP16] [--image_size IMAGE_SIZE]
+                       [--batch_size BATCH_SIZE] [--test_size TEST_SIZE]
+                       [--max_patience MAX_PATIENCE] [--epochs EPOCHS]
+                       [--seed SEED] [--loop LOOP]
 
 Train a ResNet to predict latent representations of images in a StyleGAN model
 from generated examples
@@ -108,6 +110,7 @@ optional arguments:
   --model_path MODEL_PATH
                         Save / load / create the ResNet model with this file
                         path (default: data/finetuned_resnet.h5)
+  --use_fp16 USE_FP16   Use 16-bit floating point (default: False)
   --image_size IMAGE_SIZE
                         Size of images for ResNet model (default: 256)
   --batch_size BATCH_SIZE
