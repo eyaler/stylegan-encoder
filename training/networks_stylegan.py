@@ -151,9 +151,15 @@ def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1, suffix=''):
     return tf.get_variable('weight' + suffix, shape=shape, initializer=init) * runtime_coef
 
 #----------------------------------------------------------------------------
-# Fully-connected layer - replace with TreeConnect
+# Fully-connected layer - replace with TreeConnect where appropriate
 
 if hasattr(config, 'use_treeconnect') and config.use_treeconnect:
+
+    if (hasattr(config, 'treeconnect_threshold')):
+        treeconnect_threshold = config.treeconnect_threshold
+    else:
+        treeconnect_threshold = 1024
+
     def is_square(n):
         return (n == int(math.sqrt(n) + 0.5)**2)
 
@@ -184,6 +190,14 @@ if hasattr(config, 'use_treeconnect') and config.use_treeconnect:
         layer_size = x.get_shape().as_list()
         layer_size = layer_size[1]
 
+        if "tensorflow" in str(type(fmaps)):
+            fm = fmaps.value
+        else:
+            fm = int(fmaps)
+
+        if layer_size + fm <= treeconnect_threshold: # option to only replace the larger dense layers
+            return real_dense(x, fmaps, **kwargs)
+
         if is_square(layer_size): # work out layer dimensions
             layer_l = int(math.sqrt(layer_size)+0.5)
             layer_r = layer_l
@@ -192,10 +206,6 @@ if hasattr(config, 'use_treeconnect') and config.use_treeconnect:
             layer_l = 2**math.ceil(layer_m)
             layer_r = layer_size // layer_l
 
-        if "tensorflow" in str(type(fmaps)):
-            fm = fmaps.value
-        else:
-            fm = int(fmaps)
         if fm >= layer_size: # adjust channels for output size
             fm = fm//layer_size
             rf = 1
