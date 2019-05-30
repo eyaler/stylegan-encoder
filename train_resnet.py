@@ -16,8 +16,8 @@ import keras.backend as K
 
 from keras.applications.resnet50 import ResNet50
 from keras.applications.resnet50 import preprocess_input
-from keras.layers import LocallyConnected1D, Reshape, Permute, Conv2D
-from keras.models import Sequential, load_model
+from keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Add
+from keras.models import Model, load_model
 
 def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=32):
     """
@@ -93,7 +93,7 @@ def generate_dataset(n=10000, save_path=None, seed=None, model_res=1024, image_s
 def is_square(n):
   return (n == int(math.sqrt(n) + 0.5)**2)
   
-def get_resnet_model(save_path, model_res=1024, image_size=256):
+def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, activation='elu'):
     # Build model
     if os.path.exists(save_path):
         print('Loading existing model')
@@ -102,9 +102,7 @@ def get_resnet_model(save_path, model_res=1024, image_size=256):
         print('Building model')
         model_scale = int(2*(math.log(model_res,2)-1)) # For example, 1024 -> 18
         resnet = ResNet50(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3))
-        model = Sequential()
-        model.add(resnet)
-        model.add(Conv2D(model_scale*8, 1)) # scale down to correct # of parameters
+
         layer_size = model_scale*8*8*8
         if is_square(layer_size): # work out layer dimensions
           layer_l = int(math.sqrt(layer_size)+0.5)
@@ -115,15 +113,25 @@ def get_resnet_model(save_path, model_res=1024, image_size=256):
           layer_r = layer_size // layer_l
         layer_l = int(layer_l)
         layer_r = int(layer_r)
-        model.add(Reshape((layer_l, layer_r))) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
-        model.add(LocallyConnected1D(layer_r, 1, activation='elu'))
-        model.add(Permute((2, 1)))
-        model.add(LocallyConnected1D(layer_l, 1, activation='elu'))
-        model.add(Permute((2, 1)))
-        model.add(LocallyConnected1D(layer_r, 1, activation='elu'))
-        model.add(Permute((2, 1)))
-        model.add(LocallyConnected1D(layer_l, 1, activation='elu'))
-        model.add(Reshape((model_scale, 512))) # train against all dlatent values
+
+        inp = Input(shape=(image_size, image_size, 3))
+        x = resnet(inp)
+        x = Conv2D(model_scale*8, 1)(x) # scale down to correct # of parameters
+        x = Reshape((layer_l, layer_r))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+        x_init = None
+
+        while (depth > 0):
+            x = LocallyConnected1D(layer_r, 1, activation=activation)(x)
+            x = Permute((2, 1))(x)
+            x = LocallyConnected1D(layer_l, 1, activation=activation)(x)
+            x = Permute((2, 1))(x)
+            if x_init is not None:
+                x = Add()([x, x_init])   # add skip connection
+            x_init = x
+            depth-=1
+
+        x = Reshape((model_scale, 512))(x) # train against all dlatent values
+        model = Model(inputs=inp,outputs=x)
 
     model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
     model.summary()
@@ -171,6 +179,8 @@ parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGj
 parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
 parser.add_argument('--data_dir', default='data', help='Directory for storing the ResNet model')
 parser.add_argument('--model_path', default='data/finetuned_resnet.h5', help='Save / load / create the ResNet model with this file path')
+parser.add_argument('--model_depth', default=2, help='Number of TreeConnect layers to add after ResNet', type=int)
+parser.add_argument('--activation', default='elu', help='Activation function to use after ResNet')
 parser.add_argument('--use_fp16', default=False, help='Use 16-bit floating point', type=bool)
 parser.add_argument('--image_size', default=256, help='Size of images for ResNet model', type=int)
 parser.add_argument('--batch_size', default=2048, help='Batch size for training the ResNet model', type=int)
@@ -198,7 +208,7 @@ with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
 def load_Gs():
     return Gs_network
 
-model = get_resnet_model(args.model_path, model_res=args.model_res)
+model = get_resnet_model(args.model_path, model_res=args.model_res, depth=args.model_depth, activation=args.activation)
 
 if args.loop < 0:
     while True:
