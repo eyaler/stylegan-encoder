@@ -117,9 +117,9 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, activat
         x_init = None
         inp = Input(shape=(image_size, image_size, 3))
         x = resnet(inp)
-        x = Conv2D(model_scale*8, 1)(x) # scale down to correct # of parameters
+        x = Conv2D(model_scale*8*4, 1, activation=activation)(x) # scale down a bit
         if (depth > 0):
-            x = Reshape((layer_l, layer_r))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+            x = Reshape((layer_r*2, layer_l*2))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
         while (depth > 0):
             x = LocallyConnected1D(layer_r, 1, activation=activation)(x)
             x = Permute((2, 1))(x)
