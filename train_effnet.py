@@ -99,8 +99,7 @@ def get_effnet_model(save_path, model_res=1024, image_size=256, depth=1, size=3,
 
     if os.path.exists(save_path):
         print('Loading model')
-        model = load_model(save_path)
-        return model
+        return load_model(save_path)
 
     # Build model
     print('Building model')
@@ -179,6 +178,7 @@ def get_effnet_model(save_path, model_res=1024, image_size=256, depth=1, size=3,
         x = Add()([x, x_init])   # add skip connection
     x = Reshape((model_scale, 512))(x) # train against all dlatent values
     model = Model(inputs=inp,outputs=x)
+    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
     return model
 
 def finetune_effnet(model, save_path, model_res=1024, image_size=256, batch_size=10000, test_size=1000, n_epochs=10, max_patience=5, seed=0, minibatch_size=32):
@@ -261,8 +261,8 @@ K.get_session().run(tensorflow.global_variables_initializer())
 
 if args.freeze_first:
     model.layers[1].trainable = False
+    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
 
-model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
 model.summary()
 
 if args.freeze_first: # run a training iteration first while pretrained model is frozen, then unfreeze.

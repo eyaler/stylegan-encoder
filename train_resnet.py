@@ -99,57 +99,58 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0,
     # Build model
     if os.path.exists(save_path):
         print('Loading model')
-        model = load_model(save_path)
+        return load_model(save_path)
+
+    print('Building model')
+    model_scale = int(2*(math.log(model_res,2)-1)) # For example, 1024 -> 18
+    if size <= 0:
+        resnet = ResNet50V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+    if size == 1:
+        resnet = ResNet101V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+    if size >= 2:
+        resnet = ResNet152V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+
+    layer_size = model_scale*8*8*8
+    if is_square(layer_size): # work out layer dimensions
+        layer_l = int(math.sqrt(layer_size)+0.5)
+        layer_r = layer_l
     else:
-        print('Building model')
-        model_scale = int(2*(math.log(model_res,2)-1)) # For example, 1024 -> 18
-        if size <= 0:
-            resnet = ResNet50V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
-        if size == 1:
-            resnet = ResNet101V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
-        if size >= 2:
-            resnet = ResNet152V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+        layer_m = math.log(math.sqrt(layer_size),2)
+        layer_l = 2**math.ceil(layer_m)
+        layer_r = layer_size // layer_l
+    layer_l = int(layer_l)
+    layer_r = int(layer_r)
 
-        layer_size = model_scale*8*8*8
-        if is_square(layer_size): # work out layer dimensions
-          layer_l = int(math.sqrt(layer_size)+0.5)
-          layer_r = layer_l
+    x_init = None
+    inp = Input(shape=(image_size, image_size, 3))
+    x = resnet(inp)
+
+    if (depth < 0):
+        depth = 1
+
+    if (size < 1):
+        x = Conv2D(model_scale*8*4, 1, activation=activation)(x) # scale down a bit
+        x = Reshape((layer_r*2, layer_l*2))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+    else:
+        if (size == 1):
+            x = Conv2D(1024, 1, activation=activation)(x) # scale down
+            x = Reshape((256, 256))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
         else:
-          layer_m = math.log(math.sqrt(layer_size),2)
-          layer_l = 2**math.ceil(layer_m)
-          layer_r = layer_size // layer_l
-        layer_l = int(layer_l)
-        layer_r = int(layer_r)
+            x = Reshape((256, 512))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
 
-        x_init = None
-        inp = Input(shape=(image_size, image_size, 3))
-        x = resnet(inp)
+    while (depth > 0):
+        x = LocallyConnected1D(layer_r, 1, activation=activation)(x)
+        x = Permute((2, 1))(x)
+        x = LocallyConnected1D(layer_l, 1, activation=activation)(x)
+        x = Permute((2, 1))(x)
+        if x_init is not None:
+            x = Add()([x, x_init])   # add skip connection
+        x_init = x
+        depth-=1
 
-        if (depth < 0):
-            depth = 1
-
-        if (size < 1):
-            x = Conv2D(model_scale*8*4, 1, activation=activation)(x) # scale down a bit
-            x = Reshape((layer_r*2, layer_l*2))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
-        else:
-            if (size == 1):
-                x = Conv2D(1024, 1, activation=activation)(x) # scale down
-                x = Reshape((256, 256))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
-            else:
-                x = Reshape((256, 512))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
-
-        while (depth > 0):
-            x = LocallyConnected1D(layer_r, 1, activation=activation)(x)
-            x = Permute((2, 1))(x)
-            x = LocallyConnected1D(layer_l, 1, activation=activation)(x)
-            x = Permute((2, 1))(x)
-            if x_init is not None:
-                x = Add()([x, x_init])   # add skip connection
-            x_init = x
-            depth-=1
-
-        x = Reshape((model_scale, 512))(x) # train against all dlatent values
-        model = Model(inputs=inp,outputs=x)
+    x = Reshape((model_scale, 512))(x) # train against all dlatent values
+    model = Model(inputs=inp,outputs=x)
+    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
 
     return model
 
@@ -233,8 +234,8 @@ K.get_session().run(tensorflow.global_variables_initializer())
 
 if args.freeze_first:
     model.layers[1].trainable = False
+    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
 
-model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
 model.summary()
 
 if args.freeze_first: # run a training iteration first while pretrained model is frozen, then unfreeze.
