@@ -215,8 +215,8 @@ def finetune_effnet(model, save_path, model_res=1024, image_size=256, batch_size
         if (patience > max_patience): # When done with test set, train with it and discard.
             print('Done with current test set.')
             model.fit(X_test, W_test, epochs=n_epochs, verbose=True, batch_size=minibatch_size)
-        print('Saving weights.')
-        model.save_weights(save_path)
+        print('Saving model.')
+        model.save(save_path)
 
 parser = argparse.ArgumentParser(description='Train an EfficientNet to predict latent representations of images in a StyleGAN model from generated examples', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ', help='Fetch a StyleGAN model to train on from this URL')
