@@ -12,6 +12,8 @@ import argparse
 import dnnlib
 import config
 import dnnlib.tflib as tflib
+
+import tensorflow
 import keras.backend as K
 
 from efficientnet import EfficientNetB0, EfficientNetB1, EfficientNetB2, EfficientNetB3, preprocess_input
@@ -178,9 +180,6 @@ def get_effnet_model(save_path, model_res=1024, image_size=256, depth=1, size=3,
         x = Add()([x, x_init])   # add skip connection
     x = Reshape((model_scale, 512))(x) # train against all dlatent values
     model = Model(inputs=inp,outputs=x)
-
-    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
-    model.summary()
     return model
 
 def finetune_effnet(model, save_path, model_res=1024, image_size=256, batch_size=10000, test_size=1000, n_epochs=10, max_patience=5, seed=0):
@@ -233,6 +232,7 @@ parser.add_argument('--image_size', default=256, help='Size of images for Effici
 parser.add_argument('--batch_size', default=2048, help='Batch size for training the EfficientNet model', type=int)
 parser.add_argument('--test_size', default=512, help='Batch size for testing the EfficientNet model', type=int)
 parser.add_argument('--max_patience', default=2, help='Number of iterations to wait while test loss does not improve', type=int)
+parser.add_argument('--freeze_first', default=False, help='Start training with the pre-trained network frozen, then unfreeze', type=bool)
 parser.add_argument('--epochs', default=2, help='Number of training epochs to run for each batch', type=int)
 parser.add_argument('--seed', default=-1, help='Pick a random seed for reproducibility (-1 for no random seed selected)', type=int)
 parser.add_argument('--loop', default=-1, help='Run this many iterations (-1 for infinite, halt with CTRL-C)', type=int)
@@ -256,6 +256,20 @@ with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
 
 def load_Gs():
     return Gs_network
+
+K.get_session().run(tensorflow.global_variables_initializer())
+
+if args.freeze_first:
+    model.layers[1].trainable = False
+
+model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
+model.summary()
+
+if args.freeze_first: # run a training iteration first while pretrained model is frozen, then unfreeze.
+    finetune_effnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed)
+    model.layers[1].trainable = True
+    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
+    model.summary()
 
 if args.loop < 0:
     while True:

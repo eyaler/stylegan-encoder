@@ -13,12 +13,13 @@ import dnnlib
 import config
 import dnnlib.tflib as tflib
 
-import tensorflow.keras
-import tensorflow.keras.backend as K
+import tensorflow
+import keras
+import keras.backend as K
 
 from keras_applications.resnet_v2 import ResNet50V2, ResNet101V2, ResNet152V2, preprocess_input
-from tensorflow.keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Add
-from tensorflow.keras.models import Model, load_model
+from keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Add
+from keras.models import Model, load_model
 
 def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=32):
     """
@@ -103,11 +104,11 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0,
         print('Building model')
         model_scale = int(2*(math.log(model_res,2)-1)) # For example, 1024 -> 18
         if size <= 0:
-            resnet = ResNet50V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = tensorflow.keras.backend, layers = tensorflow.keras.layers, models = tensorflow.keras.models, utils = tensorflow.keras.utils)
+            resnet = ResNet50V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
         if size == 1:
-            resnet = ResNet101V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = tensorflow.keras.backend, layers = tensorflow.keras.layers, models = tensorflow.keras.models, utils = tensorflow.keras.utils)
+            resnet = ResNet101V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
         if size >= 2:
-            resnet = ResNet152V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = tensorflow.keras.backend, layers = tensorflow.keras.layers, models = tensorflow.keras.models, utils = tensorflow.keras.utils)
+            resnet = ResNet152V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
 
         layer_size = model_scale*8*8*8
         if is_square(layer_size): # work out layer dimensions
@@ -150,8 +151,6 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0,
         x = Reshape((model_scale, 512))(x) # train against all dlatent values
         model = Model(inputs=inp,outputs=x)
 
-    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
-    model.summary()
     return model
 
 def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size=10000, test_size=1000, n_epochs=10, max_patience=5, seed=0):
@@ -204,6 +203,7 @@ parser.add_argument('--image_size', default=256, help='Size of images for ResNet
 parser.add_argument('--batch_size', default=2048, help='Batch size for training the ResNet model', type=int)
 parser.add_argument('--test_size', default=512, help='Batch size for testing the ResNet model', type=int)
 parser.add_argument('--max_patience', default=2, help='Number of iterations to wait while test loss does not improve', type=int)
+parser.add_argument('--freeze_first', default=False, help='Start training with the pre-trained network frozen, then unfreeze', type=bool)
 parser.add_argument('--epochs', default=2, help='Number of training epochs to run for each batch', type=int)
 parser.add_argument('--seed', default=-1, help='Pick a random seed for reproducibility (-1 for no random seed selected)', type=int)
 parser.add_argument('--loop', default=-1, help='Run this many iterations (-1 for infinite, halt with CTRL-C)', type=int)
@@ -227,6 +227,20 @@ with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
 
 def load_Gs():
     return Gs_network
+
+K.get_session().run(tensorflow.global_variables_initializer())
+
+if args.freeze_first:
+    model.layers[1].trainable = False
+
+model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
+model.summary()
+
+if args.freeze_first: # run a training iteration first while pretrained model is frozen, then unfreeze.
+    finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed)
+    model.layers[1].trainable = True
+    model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
+    model.summary()
 
 if args.loop < 0:
     while True:
