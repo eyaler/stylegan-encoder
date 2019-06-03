@@ -153,7 +153,7 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0,
 
     return model
 
-def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size=10000, test_size=1000, n_epochs=10, max_patience=5, seed=0):
+def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size=10000, test_size=1000, n_epochs=10, max_patience=5, seed=0, minibatch_size=32):
     """
     Finetunes a resnet to predict W from X
     Generate batches (X, W) of size 'batch_size', iterates 'n_epochs', and repeat while 'max_patience' is reached
@@ -164,7 +164,7 @@ def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size
     # Create a test set
     print('Creating test set:')
     np.random.seed(seed)
-    W_test, X_test = generate_dataset(n=test_size, model_res=model_res, image_size=image_size, seed=seed)
+    W_test, X_test = generate_dataset(n=test_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size)
 
     # Iterate on batches of size batch_size
     print('Generating training set:')
@@ -174,9 +174,9 @@ def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size
     #print('Initial test loss : {:.5f}'.format(loss))
     while (patience <= max_patience):
         W_train = X_train = None
-        W_train, X_train = generate_dataset(batch_size, model_res=model_res, image_size=image_size, seed=seed)
-        model.fit(X_train, W_train, epochs=n_epochs, verbose=True)
-        loss = model.evaluate(X_test, W_test)
+        W_train, X_train = generate_dataset(batch_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size)
+        model.fit(X_train, W_train, epochs=n_epochs, verbose=True, batch_size=minibatch_size)
+        loss = model.evaluate(X_test, W_test, batch_size=minibatch_size)
         if loss < best_loss:
             print('New best test loss : {:.5f}'.format(loss))
             patience = 0
@@ -186,7 +186,7 @@ def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size
             patience += 1
         if (patience > max_patience): # When done with test set, train with it and discard.
             print('Done with current test set.')
-            model.fit(X_test, W_test, epochs=n_epochs, verbose=True)
+            model.fit(X_test, W_test, epochs=n_epochs, verbose=True, batch_size=minibatch_size)
         print('Saving model.')
         model.save(save_path)
 
@@ -205,6 +205,7 @@ parser.add_argument('--test_size', default=512, help='Batch size for testing the
 parser.add_argument('--max_patience', default=2, help='Number of iterations to wait while test loss does not improve', type=int)
 parser.add_argument('--freeze_first', default=False, help='Start training with the pre-trained network frozen, then unfreeze', type=bool)
 parser.add_argument('--epochs', default=2, help='Number of training epochs to run for each batch', type=int)
+parser.add_argument('--minibatch_size', default=16, help='Size of minibatches for training and generation', type=int)
 parser.add_argument('--seed', default=-1, help='Pick a random seed for reproducibility (-1 for no random seed selected)', type=int)
 parser.add_argument('--loop', default=-1, help='Run this many iterations (-1 for infinite, halt with CTRL-C)', type=int)
 
@@ -237,16 +238,16 @@ model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, lo
 model.summary()
 
 if args.freeze_first: # run a training iteration first while pretrained model is frozen, then unfreeze.
-    finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed)
+    finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed, minibatch_size=args.minibatch_size)
     model.layers[1].trainable = True
     model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
     model.summary()
 
 if args.loop < 0:
     while True:
-        finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed)
+        finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed, minibatch_size=args.minibatch_size)
 else:
     count = args.loop
     while count > 0:
-        finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed)
+        finetune_resnet(model, args.model_path, model_res=args.model_res, image_size=args.image_size, batch_size=args.batch_size, test_size=args.test_size, max_patience=args.max_patience, n_epochs=args.epochs, seed=args.seed, minibatch_size=args.minibatch_size)
         count -= 1
