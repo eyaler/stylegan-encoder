@@ -13,7 +13,7 @@ From left to right: original image, predicted image from a ResNet pretrained on 
 What I've added:
 
 1) The ResNet encoder - train your own with *train_resnet.py* or [download my pre-trained model](https://drive.google.com/open?id=1aT59NFy9-bNyXjDuZOTMl0qX0jmZc6Zb)! Put the model in data/finetuned_resnet.h5
-2) Drop-in replacement to use an EfficientNet based encoder with *train_effnet.py* - thanks to @qubvel for [his Keras implementation of EfficientNets](https://github.com/qubvel/efficientnet/)! Follow the instructions there to install them first.
+2) Drop-in replacement to use an EfficientNet based encoder with *train_effnet.py* - thanks to @qubvel for [his Keras implementation of EfficientNets](https://github.com/qubvel/efficientnet/)! Install from source to get the latest version.
 3) More loss functions for the iterative encoder to improve convergence speed and face quality.
  * Original VGG loss is still present.
  * Added image loss using logcosh.
@@ -92,10 +92,11 @@ optional arguments:
 ```
 usage: train_resnet.py [-h] [--model_url MODEL_URL] [--model_res MODEL_RES]
                        [--data_dir DATA_DIR] [--model_path MODEL_PATH]
-                       [--use_fp16 USE_FP16] [--image_size IMAGE_SIZE]
-                       [--batch_size BATCH_SIZE] [--test_size TEST_SIZE]
-                       [--max_patience MAX_PATIENCE] [--epochs EPOCHS]
-                       [--seed SEED] [--loop LOOP]
+                       [--model_depth MODEL_DEPTH] [--model_size MODEL_SIZE]
+                       [--activation ACTIVATION] [--use_fp16 USE_FP16]
+                       [--image_size IMAGE_SIZE] [--batch_size BATCH_SIZE]
+                       [--test_size TEST_SIZE] [--max_patience MAX_PATIENCE]
+                       [--epochs EPOCHS] [--seed SEED] [--loop LOOP]
 
 Train a ResNet to predict latent representations of images in a StyleGAN model
 from generated examples
@@ -112,6 +113,12 @@ optional arguments:
                         Save / load / create the ResNet model with this file
                         path (default: data/finetuned_resnet.h5)
   --use_fp16 USE_FP16   Use 16-bit floating point (default: False)
+  --model_depth MODEL_DEPTH
+                        Number of TreeConnect layers to add after ResNet (default: 1)
+  --model_size MODEL_SIZE
+                        Model size - 0 - small, 1 - medium, 2 - large. (default: 0)
+  --activation ACTIVATION
+                        Activation function to use after ResNet (default: elu)
   --image_size IMAGE_SIZE
                         Size of images for ResNet model (default: 256)
   --batch_size BATCH_SIZE
@@ -132,11 +139,11 @@ optional arguments:
 ```
 usage: train_effnet.py [-h] [--model_url MODEL_URL] [--model_res MODEL_RES]
                        [--data_dir DATA_DIR] [--model_path MODEL_PATH]
-                       [--model_depth MODEL_DEPTH] [--activation ACTIVATION]
-                       [--use_fp16 USE_FP16] [--image_size IMAGE_SIZE]
-                       [--batch_size BATCH_SIZE] [--test_size TEST_SIZE]
-                       [--max_patience MAX_PATIENCE] [--epochs EPOCHS]
-                       [--seed SEED] [--loop LOOP]
+                       [--model_depth MODEL_DEPTH] [--model_size MODEL_SIZE]
+                       [--activation ACTIVATION] [--use_fp16 USE_FP16]
+                       [--image_size IMAGE_SIZE] [--batch_size BATCH_SIZE]
+                       [--test_size TEST_SIZE] [--max_patience MAX_PATIENCE]
+                       [--epochs EPOCHS] [--seed SEED] [--loop LOOP]
 
 Train an EfficientNet to predict latent representations of images in a
 StyleGAN model from generated examples
@@ -145,40 +152,30 @@ optional arguments:
   -h, --help            show this help message and exit
   --model_url MODEL_URL
                         Fetch a StyleGAN model to train on from this URL
-                        (default: https://drive.google.com/uc?id=1MEGjdvVpUsu1
-                        jB4zrXZN7Y4kBBOzizDQ)
+                        (default: https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ)
   --model_res MODEL_RES
-                        The dimension of images in the StyleGAN model
-                        (default: 1024)
-  --data_dir DATA_DIR   Directory for storing the EfficientNet model (default:
-                        data)
+                        The dimension of images in the StyleGAN model (default: 1024)
+  --data_dir DATA_DIR   Directory for storing the EfficientNet model (default: data)
   --model_path MODEL_PATH
-                        Save / load / create the EfficientNet model with this
-                        file path (default: data/finetuned_effnet.h5)
+                        Save / load / create the EfficientNet model with this file path (default: data/finetuned_effnet.h5)
   --model_depth MODEL_DEPTH
-                        Number of TreeConnect layers to add after EfficientNet
-                        (default: 2)
+                        Number of TreeConnect layers to add after EfficientNet (default: 1)
+  --model_size MODEL_SIZE
+                        Model size - 0 - small, 1 - medium, 2 - large, or 3 - full size. (default: 1)
   --activation ACTIVATION
-                        Activation function to use after EfficientNet
-                        (default: elu)
+                        Activation function to use after EfficientNet (default: elu)
   --use_fp16 USE_FP16   Use 16-bit floating point (default: False)
   --image_size IMAGE_SIZE
                         Size of images for EfficientNet model (default: 256)
   --batch_size BATCH_SIZE
-                        Batch size for training the EfficientNet model
-                        (default: 2048)
+                        Batch size for training the EfficientNet model (default: 2048)
   --test_size TEST_SIZE
-                        Batch size for testing the EfficientNet model
-                        (default: 512)
+                        Batch size for testing the EfficientNet model (default: 512)
   --max_patience MAX_PATIENCE
-                        Number of iterations to wait while test loss does not
-                        improve (default: 2)
-  --epochs EPOCHS       Number of training epochs to run for each batch
-                        (default: 2)
-  --seed SEED           Pick a random seed for reproducibility (-1 for no
-                        random seed selected) (default: -1)
-  --loop LOOP           Run this many iterations (-1 for infinite, halt with
-                        CTRL-C) (default: -1)
+                        Number of iterations to wait while test loss does not improve (default: 2)
+  --epochs EPOCHS       Number of training epochs to run for each batch (default: 2)
+  --seed SEED           Pick a random seed for reproducibility (-1 for no random seed selected) (default: -1)
+  --loop LOOP           Run this many iterations (-1 for infinite, halt with CTRL-C) (default: -1)
 ```
 ---
 ```
