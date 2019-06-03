@@ -61,7 +61,7 @@ def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, im
     X = Gs.components.synthesis.run(W, randomize_noise=False, minibatch_size=minibatch_size, print_progress=True,
                                     output_transform=dict(func=tflib.convert_images_to_uint8, nchw_to_nhwc=True))
     X = np.array([cv2.resize(x, (image_size, image_size), interpolation = cv2.INTER_AREA) for x in X])
-    X = preprocess_input(X)
+    X = preprocess_input(X, backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
     return W, X
 
 def generate_dataset(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=16):
