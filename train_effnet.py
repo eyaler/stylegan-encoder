@@ -98,9 +98,8 @@ def is_square(n):
 def get_effnet_model(save_path, model_res=1024, image_size=256, depth=1, size=3, activation='elu'):
 
     if os.path.exists(save_path):
-        print('Loading model.')
+        print('Loading model')
         model = load_model(save_path)
-        model.summary()
         return model
 
     # Build model

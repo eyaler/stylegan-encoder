@@ -98,7 +98,7 @@ def is_square(n):
 def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0, activation='elu'):
     # Build model
     if os.path.exists(save_path):
-        print('Loading existing model')
+        print('Loading model')
         model = load_model(save_path)
     else:
         print('Building model')
