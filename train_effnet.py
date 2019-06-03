@@ -14,22 +14,10 @@ import config
 import dnnlib.tflib as tflib
 import keras.backend as K
 
-from efficientnet import EfficientNetB3
+from efficientnet import EfficientNetB0, EfficientNetB1, EfficientNetB2, EfficientNetB3, preprocess_input
 
-from keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Add
+from keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Add, Concatenate
 from keras.models import Model, load_model
-
-MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
-STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
-
-def preprocess_input(x):
-    assert x.ndim >= 3
-    assert x.shape[-1] == 3
-
-    x = x - np.array(MEAN_RGB)
-    x = x / np.array(STDDEV_RGB)
-
-    return x
 
 def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=32):
     """
@@ -105,11 +93,25 @@ def generate_dataset(n=10000, save_path=None, seed=None, model_res=1024, image_s
 def is_square(n):
   return (n == int(math.sqrt(n) + 0.5)**2)
   
-def get_effnet_model(save_path, model_res=1024, image_size=256, depth=2, activation='elu'):
+def get_effnet_model(save_path, model_res=1024, image_size=256, depth=1, size=3, activation='elu'):
+
+    if os.path.exists(save_path):
+        print('Loading model.')
+        model = load_model(save_path)
+        model.summary()
+        return model
+
     # Build model
     print('Building model')
     model_scale = int(2*(math.log(model_res,2)-1)) # For example, 1024 -> 18
-    effnet = EfficientNetB3(include_top=False, weights='imagenet', input_shape=(image_size, image_size, 3))
+    if (size <= 0):
+        effnet = EfficientNetB0(include_top=False, weights='imagenet', input_shape=(image_size, image_size, 3))
+    if (size == 1):
+        effnet = EfficientNetB1(include_top=False, weights='imagenet', input_shape=(image_size, image_size, 3))
+    if (size == 2):
+        effnet = EfficientNetB2(include_top=False, weights='imagenet', input_shape=(image_size, image_size, 3))
+    if (size >= 3):
+        effnet = EfficientNetB3(include_top=False, weights='imagenet', input_shape=(image_size, image_size, 3))
 
     layer_size = model_scale*8*8*8
     if is_square(layer_size): # work out layer dimensions
@@ -125,9 +127,18 @@ def get_effnet_model(save_path, model_res=1024, image_size=256, depth=2, activat
     x_init = None
     inp = Input(shape=(image_size, image_size, 3))
     x = effnet(inp)
-    x = Conv2D(model_scale*8*4, 1, activation=activation)(x) # scale down a bit
-    if (depth > 0):
-        x = Reshape((layer_r*2, layer_l*2))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+    if (size < 1):
+        x = Conv2D(model_scale*8, 1, activation=activation)(x) # scale down
+        if (depth > 0):
+            x = Reshape((layer_r, layer_l))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+    else:
+        if (depth < 1):
+            depth = 1
+        if (size <= 2):
+            x = Conv2D(model_scale*8*4, 1, activation=activation)(x) # scale down a bit
+            x = Reshape((layer_r*2, layer_l*2))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+        else:
+            x = Reshape((384,256))(x) # full size for B3
     while (depth > 0):
         x = LocallyConnected1D(layer_r, 1, activation=activation)(x)
         x = Permute((2, 1))(x)
@@ -137,12 +148,36 @@ def get_effnet_model(save_path, model_res=1024, image_size=256, depth=2, activat
             x = Add()([x, x_init])   # add skip connection
         x_init = x
         depth-=1
-
+    if (size >= 2): # add unshared layers at end for different sections of the latent space
+        x_init = x
+        if layer_r % 3 == 0 and layer_l % 3 == 0:
+            a = LocallyConnected1D(layer_r, 1, activation=activation)(x)
+            b = LocallyConnected1D(layer_r, 1, activation=activation)(x)
+            c = LocallyConnected1D(layer_r, 1, activation=activation)(x)
+            a = Permute((2, 1))(a)
+            b = Permute((2, 1))(b)
+            c = Permute((2, 1))(c)
+            a = LocallyConnected1D(layer_l//3, 1, activation=activation)(a)
+            b = LocallyConnected1D(layer_l//3, 1, activation=activation)(b)
+            c = LocallyConnected1D(layer_l//3, 1, activation=activation)(c)
+            x = Concatenate()([a,b,c])
+        else:
+            a = LocallyConnected1D(layer_r//2, 1, activation=activation)(x)
+            b = LocallyConnected1D(layer_r//2, 1, activation=activation)(x)
+            c = LocallyConnected1D(layer_r//2, 1, activation=activation)(x)
+            d = LocallyConnected1D(layer_r//2, 1, activation=activation)(x)
+            a = Permute((2, 1))(a)
+            b = Permute((2, 1))(b)
+            c = Permute((2, 1))(c)
+            d = Permute((2, 1))(d)
+            a = LocallyConnected1D(layer_l//2, 1, activation=activation)(a)
+            b = LocallyConnected1D(layer_l//2, 1, activation=activation)(b)
+            c = LocallyConnected1D(layer_l//2, 1, activation=activation)(c)
+            d = LocallyConnected1D(layer_l//2, 1, activation=activation)(d)
+            x = Concatenate()([a,b,c,d])
+        x = Add()([x, x_init])   # add skip connection
     x = Reshape((model_scale, 512))(x) # train against all dlatent values
     model = Model(inputs=inp,outputs=x)
-    if os.path.exists(save_path):
-        print('Loading weights.')
-        model.load_weights(save_path)
 
     model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
     model.summary()
@@ -190,7 +225,8 @@ parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGj
 parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
 parser.add_argument('--data_dir', default='data', help='Directory for storing the EfficientNet model')
 parser.add_argument('--model_path', default='data/finetuned_effnet.h5', help='Save / load / create the EfficientNet model with this file path')
-parser.add_argument('--model_depth', default=2, help='Number of TreeConnect layers to add after EfficientNet', type=int)
+parser.add_argument('--model_depth', default=1, help='Number of TreeConnect layers to add after EfficientNet', type=int)
+parser.add_argument('--model_size', default=1, help='Model size - 0 - small, 1 - medium, 2 - large, or 3 - full size.', type=int)
 parser.add_argument('--activation', default='elu', help='Activation function to use after EfficientNet')
 parser.add_argument('--use_fp16', default=False, help='Use 16-bit floating point', type=bool)
 parser.add_argument('--image_size', default=256, help='Size of images for EfficientNet model', type=int)
@@ -212,14 +248,14 @@ if args.use_fp16:
     K.set_floatx('float16')
     K.set_epsilon(1e-4) 
 
+model = get_effnet_model(args.model_path, model_res=args.model_res, depth=args.model_depth, size=args.model_size, activation=args.activation)
+
 tflib.init_tf()
 with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
     generator_network, discriminator_network, Gs_network = pickle.load(f)
 
 def load_Gs():
     return Gs_network
-
-model = get_effnet_model(args.model_path, model_res=args.model_res, depth=args.model_depth, activation=args.activation)
 
 if args.loop < 0:
     while True:
