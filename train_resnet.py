@@ -17,8 +17,7 @@ import tensorflow
 import keras
 import keras.backend as K
 
-#from keras_applications.resnet_v2 import ResNet50V2, ResNet101V2, ResNet152V2, preprocess_input
-from keras.applications.resnet50 import ResNet50, preprocess_input
+from keras.applications.resnet50 import preprocess_input
 from keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Add
 from keras.models import Model, load_model
 
@@ -105,15 +104,18 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0,
 
     print('Building model')
     model_scale = int(2*(math.log(model_res,2)-1)) # For example, 1024 -> 18
-    resnet = ResNet50(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3))
-    """
+
     if size <= 0:
-        resnet = ResNet50V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+        from keras.applications.resnet50 import ResNet50
+        resnet = ResNet50(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3))
+    else:
+        from keras_applications.resnet_v2 import ResNet50V2, ResNet101V2, ResNet152V2
     if size == 1:
+        resnet = ResNet50V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
+    if size == 2:
         resnet = ResNet101V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
-    if size >= 2:
+    if size >= 3:
         resnet = ResNet152V2(include_top=False, pooling=None, weights='imagenet', input_shape=(image_size, image_size, 3), backend = keras.backend, layers = keras.layers, models = keras.models, utils = keras.utils)
-    """
 
     layer_size = model_scale*8*8*8
     if is_square(layer_size): # work out layer dimensions
@@ -133,17 +135,21 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0,
     if (depth < 0):
         depth = 1
 
-    if (size < 1):
-        x = Conv2D(model_scale*8*4, 1, activation=activation)(x) # scale down a bit
-        x = Reshape((layer_r*2, layer_l*2))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
-    else:
-        if (size == 1):
-            x = Conv2D(1024, 1, activation=activation)(x) # scale down
-            x = Reshape((256, 256))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+    if (size <= 1):
+        if (size <= 0):
+            x = Conv2D(model_scale*8, 1, activation=activation)(x) # scale down
+            x = Reshape((layer_r, layer_l))(x)
         else:
-            x = Reshape((256, 512))(x) # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
+            x = Conv2D(model_scale*8*4, 1, activation=activation)(x) # scale down a little
+            x = Reshape((layer_r*2, layer_l*2))(x)
+    else:
+        if (size == 2):
+            x = Conv2D(1024, 1, activation=activation)(x) # scale down a bit
+            x = Reshape((256, 256))(x)
+        else:
+            x = Reshape((256, 512))(x) # all weights used
 
-    while (depth > 0):
+    while (depth > 0): # See https://github.com/OliverRichter/TreeConnect/blob/master/cifar.py - TreeConnect inspired layers instead of dense layers.
         x = LocallyConnected1D(layer_r, 1, activation=activation)(x)
         x = Permute((2, 1))(x)
         x = LocallyConnected1D(layer_l, 1, activation=activation)(x)
@@ -201,7 +207,7 @@ parser.add_argument('--model_res', default=1024, help='The dimension of images i
 parser.add_argument('--data_dir', default='data', help='Directory for storing the ResNet model')
 parser.add_argument('--model_path', default='data/finetuned_resnet.h5', help='Save / load / create the ResNet model with this file path')
 parser.add_argument('--model_depth', default=1, help='Number of TreeConnect layers to add after ResNet', type=int)
-parser.add_argument('--model_size', default=0, help='Model size - 0 - small, 1 - medium, 2 - large.', type=int)
+parser.add_argument('--model_size', default=1, help='Model size - 0 - small, 1 - medium, 2 - large, 3 - full.', type=int)
 parser.add_argument('--activation', default='elu', help='Activation function to use after ResNet')
 parser.add_argument('--optimizer', default='adam', help='Optimizer to use')
 parser.add_argument('--loss', default='logcosh', help='Loss function to use')
