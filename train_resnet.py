@@ -151,7 +151,6 @@ def get_resnet_model(save_path, model_res=1024, image_size=256, depth=2, size=0,
     x = Reshape((model_scale, 512))(x) # train against all dlatent values
     model = Model(inputs=inp,outputs=x)
     model.compile(loss='logcosh', metrics=[], optimizer='adam') # Adam optimizer, logcosh used for loss.
-
     return model
 
 def finetune_resnet(model, save_path, model_res=1024, image_size=256, batch_size=10000, test_size=1000, n_epochs=10, max_patience=5, seed=0, minibatch_size=32):
@@ -221,16 +220,15 @@ if args.use_fp16:
     K.set_floatx('float16')
     K.set_epsilon(1e-4) 
 
+tflib.init_tf()
+
 model = get_resnet_model(args.model_path, model_res=args.model_res, depth=args.model_depth, size=args.model_size, activation=args.activation)
 
-tflib.init_tf()
 with dnnlib.util.open_url(args.model_url, cache_dir=config.cache_dir) as f:
     generator_network, discriminator_network, Gs_network = pickle.load(f)
 
 def load_Gs():
     return Gs_network
-
-K.get_session().run(tensorflow.global_variables_initializer())
 
 if args.freeze_first:
     model.layers[1].trainable = False
