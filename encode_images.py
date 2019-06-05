@@ -117,6 +117,7 @@ def main():
                     from keras.applications.resnet50 import preprocess_input
             if (ff_model is None):
                 if os.path.exists(args.load_effnet):
+                    import efficientnet
                     print("Loading EfficientNet Model:")
                     ff_model = load_model(args.load_effnet)
                     from efficientnet import preprocess_input
