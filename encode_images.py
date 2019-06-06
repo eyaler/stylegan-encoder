@@ -21,6 +21,7 @@ def main():
     parser.add_argument('generated_images_dir', help='Directory for storing generated images')
     parser.add_argument('dlatent_dir', help='Directory for storing dlatent representations')
     parser.add_argument('--data_dir', default='data', help='Directory for storing optional models')
+    parser.add_argument('--mask_dir', default='masks', help='Directory for storing optional masks')
     parser.add_argument('--load_last', default='', help='Start with embeddings from directory')
     parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ', help='Fetch a StyleGAN model to train on from this URL') # karras2019stylegan-ffhq-1024x1024.pkl
     parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
@@ -49,6 +50,12 @@ def main():
     parser.add_argument('--tile_dlatents', default=False, help='Tile dlatents to use a single vector at each scale', type=bool)
     parser.add_argument('--clipping_threshold', default=2.0, help='Stochastic clipping of gradient values outside of this threshold', type=float)
 
+    # Masking params
+    parser.add_argument('--load_mask', default=False, help='Load segmentation masks', type=bool)
+    parser.add_argument('--face_mask', default=False, help='Generate a mask for predicting only the face area', type=bool)
+    parser.add_argument('--use_grabcut', default=True, help='Use grabcut algorithm on the face mask to better segment the foreground', type=bool)
+    parser.add_argument('--scale_mask', default=1.5, help='Look over a wider section of foreground for grabcut', type=float)
+
     # Video params
     parser.add_argument('--video_dir', default='videos', help='Directory for storing training videos')
     parser.add_argument('--output_video', default=False, help='Generate videos of the optimization process', type=bool)
@@ -72,6 +79,7 @@ def main():
         raise Exception('%s is empty' % args.src_dir)
 
     os.makedirs(args.data_dir, exist_ok=True)
+    os.makedirs(args.mask_dir, exist_ok=True)
     os.makedirs(args.generated_images_dir, exist_ok=True)
     os.makedirs(args.dlatent_dir, exist_ok=True)
     os.makedirs(args.video_dir, exist_ok=True)

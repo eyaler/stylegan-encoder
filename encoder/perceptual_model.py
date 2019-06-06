@@ -1,7 +1,10 @@
+import os
+import bz2
 import PIL.Image
 import numpy as np
 import tensorflow as tf
 from keras.models import Model
+from keras.utils import get_file
 from keras.applications.vgg16 import VGG16, preprocess_input
 import keras.backend as K
 
@@ -32,6 +35,10 @@ class PerceptualModel:
         self.img_size = args.image_size
         self.layer = args.use_vgg_layer
         self.vgg_loss = args.use_vgg_loss
+        self.face_mask = args.face_mask
+        self.use_grabcut = args.use_grabcut
+        self.scale_mask = args.scale_mask
+        self.mask_dir = args.mask_dir
         if (self.layer <= 0 or self.vgg_loss <= self.epsilon):
             self.vgg_loss = None
         self.pixel_loss = args.use_pixel_loss
@@ -77,20 +84,20 @@ class PerceptualModel:
         generated_image = tf.image.resize_nearest_neighbor(generated_image_tensor,
                                                                   (self.img_size, self.img_size), align_corners=True)
 
+        self.ref_img = tf.get_variable('ref_img', shape=generated_image.shape,
+                                                dtype='float32', initializer=tf.initializers.zeros())
+        self.ref_weight = tf.get_variable('ref_weight', shape=generated_image.shape,
+                                               dtype='float32', initializer=tf.initializers.zeros())
+
         if (self.vgg_loss is not None):
             vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
             self.perceptual_model = Model(vgg16.input, vgg16.layers[self.layer].output)
-            generated_img_features = self.perceptual_model(preprocess_input(generated_image))
+            generated_img_features = self.perceptual_model(preprocess_input(self.ref_weight * generated_image))
             self.ref_img_features = tf.get_variable('ref_img_features', shape=generated_img_features.shape,
                                                 dtype='float32', initializer=tf.initializers.zeros())
             self.features_weight = tf.get_variable('features_weight', shape=generated_img_features.shape,
                                                dtype='float32', initializer=tf.initializers.zeros())
             self.sess.run([self.features_weight.initializer, self.features_weight.initializer])
-
-        self.ref_img = tf.get_variable('ref_img', shape=generated_image.shape,
-                                                dtype='float32', initializer=tf.initializers.zeros())
-        self.ref_weight = tf.get_variable('ref_weight', shape=generated_image.shape,
-                                               dtype='float32', initializer=tf.initializers.zeros())
 
         self.loss = 0
         # L1 loss on VGG16 features
@@ -117,7 +124,58 @@ class PerceptualModel:
             image_features = self.perceptual_model.predict_on_batch(preprocess_input(loaded_image))
             weight_mask = np.ones(self.features_weight.shape)
 
-        image_mask = np.ones(self.ref_weight.shape)
+        if self.face_mask:
+            import dlib
+            from imutils import face_utils
+            import cv2
+            detector = dlib.get_frontal_face_detector()
+
+            LANDMARKS_MODEL_URL = 'http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2'
+
+            def unpack_bz2(src_path):
+                data = bz2.BZ2File(src_path).read()
+                dst_path = src_path[:-4]
+                with open(dst_path, 'wb') as fp:
+                    fp.write(data)
+                return dst_path
+
+            landmarks_model_path = unpack_bz2(get_file('shape_predictor_68_face_landmarks.dat.bz2',
+                                                    LANDMARKS_MODEL_URL, cache_subdir='temp'))
+
+            predictor = dlib.shape_predictor(landmarks_model_path)
+            image_mask = np.zeros(self.ref_weight.shape)
+            for (i, im) in enumerate(loaded_image):
+                rects = detector(im, 1)
+                # loop over the face detections
+                for (j, rect) in enumerate(rects):
+                    """
+                    Determine the facial landmarks for the face region, then convert the facial landmark (x, y)-coordinates to a NumPy array
+                    """
+                    shape = predictor(im, rect)
+                    shape = face_utils.shape_to_np(shape)
+
+                    # we extract the face
+                    vertices = cv2.convexHull(shape)
+                    mask = np.zeros(im.shape[:2],np.uint8)
+                    cv2.fillConvexPoly(mask, vertices, 1)
+                    if self.use_grabcut:
+                        bgdModel = np.zeros((1,65),np.float64)
+                        fgdModel = np.zeros((1,65),np.float64)
+                        rect = (0,0,image_mask.shape[1],image_mask.shape[2])
+                        (x,y),radius = cv2.minEnclosingCircle(vertices)
+                        center = (int(x),int(y))
+                        radius = int(radius*self.scale_mask)
+                        mask = cv2.circle(mask,center,radius,cv2.GC_PR_FGD,-1)
+                        cv2.fillConvexPoly(mask, vertices, cv2.GC_FGD)
+                        cv2.grabCut(im,mask,rect,bgdModel,fgdModel,5,cv2.GC_INIT_WITH_MASK)
+                        mask = np.where((mask==2)|(mask==0),0,1)
+                    image_mask[i] = np.ones(image_mask[i].shape,np.float32) * np.expand_dims(mask,axis=-1)
+                    imask = PIL.Image.fromarray((255*image_mask[i]).astype('uint8'), 'RGB')
+                    _, img_name = os.path.split(images_list[i])
+                    imask.save(os.path.join(self.mask_dir, f'{img_name}'), 'PNG')
+            img = None
+        else:
+            image_mask = np.ones(self.ref_weight.shape)
 
         if len(images_list) != self.batch_size:
             if image_features is not None:
@@ -134,7 +192,7 @@ class PerceptualModel:
             empty_images_space = [self.batch_size - len(images_list)] + images_space
             existing_images = np.ones(shape=existing_images_space)
             empty_images = np.zeros(shape=empty_images_space)
-            image_mask = np.vstack([existing_images, empty_images])
+            image_mask = image_mask * np.vstack([existing_images, empty_images])
             loaded_image = np.vstack([loaded_image, np.zeros(empty_images_space)])
 
         if image_features is not None:
