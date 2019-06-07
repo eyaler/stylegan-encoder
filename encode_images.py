@@ -116,7 +116,7 @@ def main():
                 if (dlatents is None):
                     dlatents = dl
                 else:
-                    dlatents = np.vstack((acc,dl))
+                    dlatents = np.vstack((dlatents,dl))
         else:
             if (ff_model is None):
                 if os.path.exists(args.load_resnet):

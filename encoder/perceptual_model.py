@@ -7,6 +7,7 @@ from keras.models import Model
 from keras.utils import get_file
 from keras.applications.vgg16 import VGG16, preprocess_input
 import keras.backend as K
+import traceback
 
 def load_images(images_list, image_size=256):
     loaded_images = list()
@@ -23,6 +24,13 @@ def tf_custom_l1_loss(img1,img2):
 
 def tf_custom_logcosh_loss(img1,img2):
   return tf.math.reduce_mean(tf.keras.losses.logcosh(img1,img2))
+
+def unpack_bz2(src_path):
+    data = bz2.BZ2File(src_path).read()
+    dst_path = src_path[:-4]
+    with open(dst_path, 'wb') as fp:
+        fp.write(data)
+    return dst_path
 
 class PerceptualModel:
     def __init__(self, args, batch_size=1, perc_model=None, sess=None):
@@ -64,6 +72,14 @@ class PerceptualModel:
         self.ref_img_features = None
         self.features_weight = None
         self.loss = None
+
+        if self.face_mask:
+            import dlib
+            self.detector = dlib.get_frontal_face_detector()
+            LANDMARKS_MODEL_URL = 'http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2'
+            landmarks_model_path = unpack_bz2(get_file('shape_predictor_68_face_landmarks.dat.bz2',
+                                                    LANDMARKS_MODEL_URL, cache_subdir='temp'))
+            self.predictor = dlib.shape_predictor(landmarks_model_path)
 
     def compare_images(self,img1,img2):
         if self.perc_model is not None:
@@ -116,6 +132,35 @@ class PerceptualModel:
         if self.l1_penalty is not None:
             self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable-generator.get_dlatent_avg()))
 
+    def generate_face_mask(self, im):
+        from imutils import face_utils
+        import cv2
+        rects = self.detector(im, 1)
+        # loop over the face detections
+        for (j, rect) in enumerate(rects):
+            """
+            Determine the facial landmarks for the face region, then convert the facial landmark (x, y)-coordinates to a NumPy array
+            """
+            shape = self.predictor(im, rect)
+            shape = face_utils.shape_to_np(shape)
+
+            # we extract the face
+            vertices = cv2.convexHull(shape)
+            mask = np.zeros(im.shape[:2],np.uint8)
+            cv2.fillConvexPoly(mask, vertices, 1)
+            if self.use_grabcut:
+                bgdModel = np.zeros((1,65),np.float64)
+                fgdModel = np.zeros((1,65),np.float64)
+                rect = (0,0,im.shape[1],im.shape[2])
+                (x,y),radius = cv2.minEnclosingCircle(vertices)
+                center = (int(x),int(y))
+                radius = int(radius*self.scale_mask)
+                mask = cv2.circle(mask,center,radius,cv2.GC_PR_FGD,-1)
+                cv2.fillConvexPoly(mask, vertices, cv2.GC_FGD)
+                cv2.grabCut(im,mask,rect,bgdModel,fgdModel,5,cv2.GC_INIT_WITH_MASK)
+                mask = np.where((mask==2)|(mask==0),0,1)
+            return mask
+
     def set_reference_images(self, images_list):
         assert(len(images_list) != 0 and len(images_list) <= self.batch_size)
         loaded_image = load_images(images_list, self.img_size)
@@ -125,54 +170,30 @@ class PerceptualModel:
             weight_mask = np.ones(self.features_weight.shape)
 
         if self.face_mask:
-            import dlib
-            from imutils import face_utils
-            import cv2
-            detector = dlib.get_frontal_face_detector()
-
-            LANDMARKS_MODEL_URL = 'http://dlib.net/files/shape_predictor_68_face_landmarks.dat.bz2'
-
-            def unpack_bz2(src_path):
-                data = bz2.BZ2File(src_path).read()
-                dst_path = src_path[:-4]
-                with open(dst_path, 'wb') as fp:
-                    fp.write(data)
-                return dst_path
-
-            landmarks_model_path = unpack_bz2(get_file('shape_predictor_68_face_landmarks.dat.bz2',
-                                                    LANDMARKS_MODEL_URL, cache_subdir='temp'))
-
-            predictor = dlib.shape_predictor(landmarks_model_path)
             image_mask = np.zeros(self.ref_weight.shape)
             for (i, im) in enumerate(loaded_image):
-                rects = detector(im, 1)
-                # loop over the face detections
-                for (j, rect) in enumerate(rects):
-                    """
-                    Determine the facial landmarks for the face region, then convert the facial landmark (x, y)-coordinates to a NumPy array
-                    """
-                    shape = predictor(im, rect)
-                    shape = face_utils.shape_to_np(shape)
-
-                    # we extract the face
-                    vertices = cv2.convexHull(shape)
-                    mask = np.zeros(im.shape[:2],np.uint8)
-                    cv2.fillConvexPoly(mask, vertices, 1)
-                    if self.use_grabcut:
-                        bgdModel = np.zeros((1,65),np.float64)
-                        fgdModel = np.zeros((1,65),np.float64)
-                        rect = (0,0,image_mask.shape[1],image_mask.shape[2])
-                        (x,y),radius = cv2.minEnclosingCircle(vertices)
-                        center = (int(x),int(y))
-                        radius = int(radius*self.scale_mask)
-                        mask = cv2.circle(mask,center,radius,cv2.GC_PR_FGD,-1)
-                        cv2.fillConvexPoly(mask, vertices, cv2.GC_FGD)
-                        cv2.grabCut(im,mask,rect,bgdModel,fgdModel,5,cv2.GC_INIT_WITH_MASK)
-                        mask = np.where((mask==2)|(mask==0),0,1)
-                    image_mask[i] = np.ones(image_mask[i].shape,np.float32) * np.expand_dims(mask,axis=-1)
-                    imask = PIL.Image.fromarray((255*image_mask[i]).astype('uint8'), 'RGB')
+                try:
                     _, img_name = os.path.split(images_list[i])
-                    imask.save(os.path.join(self.mask_dir, f'{img_name}'), 'PNG')
+                    mask_img = os.path.join(self.mask_dir, f'{img_name}')
+                    if (os.path.isfile(mask_img)):
+                        print("Loading mask " + mask_img)
+                        imask = PIL.Image.open(mask_img).convert('L')
+                        mask = imask/255
+                        mask = np.expand_dims(mask,axis=-1)
+                    else:
+                        mask = self.generate_face_mask(im)
+                        imask = (255*mask).astype('uint8')
+                        imask = PIL.Image.fromarray(imask, 'L')
+                        print("Saving mask " + mask_img)
+                        imask.save(mask_img, 'PNG')
+                        mask = np.expand_dims(mask,axis=-1)
+                    mask = np.ones(im.shape,np.float32) * mask
+                except Exception as e:
+                    print("Exception in mask handling for " + mask_img)
+                    traceback.print_exc()
+                    mask = np.ones(im.shape[:2],np.uint8)
+                    mask = np.ones(im.shape,np.float32) * np.expand_dims(mask,axis=-1)
+                image_mask[i] = mask
             img = None
         else:
             image_mask = np.ones(self.ref_weight.shape)
