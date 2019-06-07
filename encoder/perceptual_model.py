@@ -178,7 +178,7 @@ class PerceptualModel:
                     if (os.path.isfile(mask_img)):
                         print("Loading mask " + mask_img)
                         imask = PIL.Image.open(mask_img).convert('L')
-                        mask = imask/255
+                        mask = np.array(imask)/255
                         mask = np.expand_dims(mask,axis=-1)
                     else:
                         mask = self.generate_face_mask(im)
