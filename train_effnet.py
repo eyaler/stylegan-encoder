@@ -22,7 +22,7 @@ from keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Ad
 from keras.models import Model, load_model
 
 """
-Truncation method from @oneiroid - try to find the closest point on the manifold instead of the average point
+Truncation method from @oneiroid
 """
 def truncate_fancy(dlat, dlat_avg, model_scale=18, truncation_psi=0.7, minlayer=0, maxlayer=8, do_clip=False):
     layer_idx = np.arange(model_scale)[np.newaxis, :, np.newaxis]
