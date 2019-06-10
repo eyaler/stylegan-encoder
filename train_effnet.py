@@ -21,7 +21,24 @@ from efficientnet import EfficientNetB0, EfficientNetB1, EfficientNetB2, Efficie
 from keras.layers import Input, LocallyConnected1D, Reshape, Permute, Conv2D, Add, Concatenate
 from keras.models import Model, load_model
 
-def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=32, truncation=0.7):
+"""
+Truncation method from @oneiroid - try to find the closest point on the manifold instead of the average point
+"""
+def truncate_fancy(dlat, dlat_avg, model_scale=18, truncation_psi=0.7, minlayer=0, maxlayer=8, do_clip=False):
+    layer_idx = np.arange(model_scale)[np.newaxis, :, np.newaxis]
+    ones = np.ones(layer_idx.shape, dtype=np.float32)
+    coefs = np.where(layer_idx < maxlayer, truncation_psi * ones, ones)
+    if minlayer > 0:
+        coefs[0, :minlayer, :] = ones[0, :minlayer, :]
+    if do_clip:
+        return tflib.lerp_clip(dlat_avg, dlat, coefs).eval()
+    else:
+        return tflib.lerp(dlat_avg, dlat, coefs)
+
+def truncate_normal(dlat, dlat_avg, truncation_psi=0.7):
+    return (dlat - dlat_avg) * truncation_psi + dlat_avg
+
+def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=32, truncation=0.7, fancy_truncation=False):
     """
     Generates a dataset of 'n' images of shape ('size', 'size', 3) with random seed 'seed'
     along with their dlatent vectors W of shape ('n', 512)
@@ -54,8 +71,10 @@ def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, im
         Z = np.random.randn(n*mod_l, Gs.input_shape[1])
     W = Gs.components.mapping.run(Z, None, minibatch_size=minibatch_size) # Use mapping network to get unique dlatents for more variation.
     dlatent_avg = Gs.get_var('dlatent_avg') # [component]
-    W = (W[np.newaxis] - dlatent_avg) * np.reshape([truncation, -truncation], [-1, 1, 1, 1]) + dlatent_avg # truncation trick and add negative image pair
-    W = np.append(W[0], W[1], axis=0)
+    if fancy_truncation:
+        W = np.append(truncate_fancy(W, dlatent_avg, model_scale, truncation), truncate_fancy(W, dlatent_avg, model_scale, -truncation), axis=0)
+    else:
+        W = np.append(truncate_normal(W, dlatent_avg, truncation), truncate_normal(W, dlatent_avg, -truncation), axis=0)
     W = W[:, :mod_r]
     W = W.reshape((n*2, model_scale, 512))
     X = Gs.components.synthesis.run(W, randomize_noise=False, minibatch_size=minibatch_size, print_progress=True,
@@ -64,7 +83,7 @@ def generate_dataset_main(n=10000, save_path=None, seed=None, model_res=1024, im
     X = preprocess_input(X)
     return W, X
 
-def generate_dataset(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=16, truncation=0.7):
+def generate_dataset(n=10000, save_path=None, seed=None, model_res=1024, image_size=256, minibatch_size=16, truncation=0.7, fancy_truncation=False):
     """
     Use generate_dataset_main() as a helper function.
     Divides requests into batches to save memory.
@@ -72,14 +91,14 @@ def generate_dataset(n=10000, save_path=None, seed=None, model_res=1024, image_s
     batch_size = 16
     inc = n//batch_size
     left = n-((batch_size-1)*inc)
-    W, X = generate_dataset_main(inc, save_path, seed, model_res, image_size, minibatch_size, truncation)
+    W, X = generate_dataset_main(inc, save_path, seed, model_res, image_size, minibatch_size, truncation, fancy_truncation)
     for i in range(batch_size-2):
-        aW, aX = generate_dataset_main(inc, save_path, seed, model_res, image_size, minibatch_size, truncation)
+        aW, aX = generate_dataset_main(inc, save_path, seed, model_res, image_size, minibatch_size, truncation, fancy_truncation)
         W = np.append(W, aW, axis=0)
         aW = None
         X = np.append(X, aX, axis=0)
         aX = None
-    aW, aX = generate_dataset_main(left, save_path, seed, model_res, image_size, minibatch_size, truncation)
+    aW, aX = generate_dataset_main(left, save_path, seed, model_res, image_size, minibatch_size, truncation, fancy_truncation)
     W = np.append(W, aW, axis=0)
     aW = None
     X = np.append(X, aX, axis=0)
@@ -197,7 +216,7 @@ def finetune_effnet(model, args):
     seed=args.seed
     minibatch_size=args.minibatch_size
     truncation=args.truncation
-    weight_epochs=args.weight_epochs
+    fancy_truncation=args.fancy_truncation
     use_ktrain=args.use_ktrain
     ktrain_max_lr=args.ktrain_max_lr
     ktrain_reduce_lr=args.ktrain_reduce_lr
@@ -208,7 +227,7 @@ def finetune_effnet(model, args):
     # Create a test set
     np.random.seed(seed)
     print('Creating test set:')
-    W_test, X_test = generate_dataset(n=test_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size, truncation=truncation)
+    W_test, X_test = generate_dataset(n=test_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size, truncation=truncation, fancy_truncation=fancy_truncation)
 
     # Iterate on batches of size batch_size
     print('Generating training set:')
@@ -219,10 +238,10 @@ def finetune_effnet(model, args):
     #print('Initial test loss : {:.5f}'.format(loss))
     while (patience <= max_patience):
         W_train = X_train = None
-        W_train, X_train = generate_dataset(batch_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size, truncation=truncation)
+        W_train, X_train = generate_dataset(batch_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size, truncation=truncation, fancy_truncation=fancy_truncation)
         if use_ktrain:
             print('Creating validation set:')
-            W_val, X_val = generate_dataset(n=test_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size, truncation=truncation)
+            W_val, X_val = generate_dataset(n=test_size, model_res=model_res, image_size=image_size, seed=seed, minibatch_size=minibatch_size, truncation=truncation, fancy_truncation=fancy_truncation)
             learner = ktrain.get_learner(model=model, 
                                 train_data=(X_train, W_train), val_data=(X_val, W_val), 
                                 workers=1, use_multiprocessing=False,
@@ -268,6 +287,7 @@ parser.add_argument('--image_size', default=256, help='Size of images for Effici
 parser.add_argument('--batch_size', default=2048, help='Batch size for training the EfficientNet model', type=int)
 parser.add_argument('--test_size', default=512, help='Batch size for testing the EfficientNet model', type=int)
 parser.add_argument('--truncation', default=0.7, help='Generate images using truncation trick', type=float)
+parser.add_argument('--fancy_truncation', default=True, help='Use fancier truncation proposed by @oneiroid', type=float)
 parser.add_argument('--max_patience', default=2, help='Number of iterations to wait while test loss does not improve', type=int)
 parser.add_argument('--freeze_first', default=False, help='Start training with the pre-trained network frozen, then unfreeze', type=bool)
 parser.add_argument('--epochs', default=2, help='Number of training epochs to run for each batch', type=int)
