@@ -44,7 +44,8 @@ class Generator:
                                                 partial(create_stub, batch_size=batch_size)],
                 structure='fixed')
 
-        self.dlatent_avg = model.get_var('dlatent_avg')
+        self.dlatent_avg_def = model.get_var('dlatent_avg')
+        self.reset_dlatent_avg()
         self.sess = tf.get_default_session()
         self.graph = tf.get_default_graph()
 
@@ -92,6 +93,12 @@ class Generator:
 
     def get_dlatent_avg(self):
         return self.dlatent_avg
+
+    def set_dlatent_avg(self, dlatent_avg):
+        self.dlatent_avg = dlatent_avg
+
+    def reset_dlatent_avg(self):
+        self.dlatent_avg = self.dlatent_avg_def
 
     def generate_images(self, dlatents=None):
         if dlatents:
