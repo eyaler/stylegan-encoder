@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--data_dir', default='data', help='Directory for storing optional models')
     parser.add_argument('--mask_dir', default='masks', help='Directory for storing optional masks')
     parser.add_argument('--load_last', default='', help='Start with embeddings from directory')
+    parser.add_argument('--dlatent_avg', default='', help='Use dlatent from file specified here for truncation instead of dlatent_avg from Gs')
     parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ', help='Fetch a StyleGAN model to train on from this URL') # karras2019stylegan-ffhq-1024x1024.pkl
     parser.add_argument('--model_res', default=1024, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
@@ -90,6 +91,8 @@ def main():
         generator_network, discriminator_network, Gs_network = pickle.load(f)
 
     generator = Generator(Gs_network, args.batch_size, clipping_threshold=args.clipping_threshold, tiled_dlatent=args.tile_dlatents, model_res=args.model_res, randomize_noise=args.randomize_noise)
+    if (args.dlatent_avg != ''):
+        generator.set_dlatent_avg(np.load(args.dlatent_avg))
 
     perc_model = None
     if (args.use_lpips_loss > 0.00000001):
