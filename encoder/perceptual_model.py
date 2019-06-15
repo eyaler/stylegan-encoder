@@ -86,8 +86,15 @@ class PerceptualModel:
             return self.perc_model.get_output_for(tf.transpose(img1, perm=[0,3,2,1]), tf.transpose(img2, perm=[0,3,2,1]))
         return 0
 
-    def build_perceptual_model(self, generator):
+    def add_placeholder(self, var_name):
+        var_val = getattr(self, var_name)
+        setattr(self, var_name + "_placeholder", tf.placeholder(var_val.dtype, shape=var_val.get_shape()))
+        setattr(self, var_name + "_op", var_val.assign(getattr(self, var_name + "_placeholder")))
 
+    def assign_placeholder(self, var_name, var_val):
+        self.sess.run(getattr(self, var_name + "_op"), {getattr(self, var_name + "_placeholder"): var_val})
+
+    def build_perceptual_model(self, generator):
         # Learning rate
         global_step = tf.Variable(0, dtype=tf.int32, trainable=False, name="global_step")
         incremented_global_step = tf.assign_add(global_step, 1)
@@ -104,6 +111,8 @@ class PerceptualModel:
                                                 dtype='float32', initializer=tf.initializers.zeros())
         self.ref_weight = tf.get_variable('ref_weight', shape=generated_image.shape,
                                                dtype='float32', initializer=tf.initializers.zeros())
+        self.add_placeholder("ref_img")
+        self.add_placeholder("ref_weight")
 
         if (self.vgg_loss is not None):
             vgg16 = VGG16(include_top=False, input_shape=(self.img_size, self.img_size, 3))
@@ -114,6 +123,8 @@ class PerceptualModel:
             self.features_weight = tf.get_variable('features_weight', shape=generated_img_features.shape,
                                                dtype='float32', initializer=tf.initializers.zeros())
             self.sess.run([self.features_weight.initializer, self.features_weight.initializer])
+            self.add_placeholder("ref_img_features")
+            self.add_placeholder("features_weight")
 
         self.loss = 0
         # L1 loss on VGG16 features
@@ -217,10 +228,10 @@ class PerceptualModel:
             loaded_image = np.vstack([loaded_image, np.zeros(empty_images_space)])
 
         if image_features is not None:
-            self.sess.run(tf.assign(self.features_weight, weight_mask))
-            self.sess.run(tf.assign(self.ref_img_features, image_features))
-        self.sess.run(tf.assign(self.ref_weight, image_mask))
-        self.sess.run(tf.assign(self.ref_img, loaded_image))
+            self.assign_placeholder("features_weight", weight_mask)
+            self.assign_placeholder("ref_img_features", image_features)
+        self.assign_placeholder("ref_weight", image_mask)
+        self.assign_placeholder("ref_img", loaded_image)
 
     def optimize(self, vars_to_optimize, iterations=200):
         vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
