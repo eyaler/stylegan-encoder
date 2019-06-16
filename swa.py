@@ -42,9 +42,10 @@ parser = argparse.ArgumentParser(description='Perform stochastic weight averagin
 parser.add_argument('results_dir', help='Directory with network checkpoints for weight averaging')
 parser.add_argument('--filespec', default='network*.pkl', help='The files to average')
 parser.add_argument('--output_model', default='network_avg.pkl', help='The averaged model to output')
+parser.add_argument('--count', default=6, help='Average the last n checkpoints', type=int)
 
 args, other_args = parser.parse_known_args()
-swa_epochs = 6
+swa_epochs = args.count
 filepath = args.output_model
 files = glob.glob(os.path.join(args.results_dir,args.filespec))
 if (len(files)>swa_epochs):
