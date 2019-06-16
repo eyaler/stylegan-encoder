@@ -219,6 +219,26 @@ optional arguments:
 ```
 ---
 ```
+usage: swa.py [-h] [--filespec FILESPEC] [--output_model OUTPUT_MODEL]
+              [--count COUNT]
+              results_dir
+
+Perform stochastic weight averaging
+
+positional arguments:
+  results_dir           Directory with network checkpoints for weight
+                        averaging
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --filespec FILESPEC   The files to average (default: network*.pkl)
+  --output_model OUTPUT_MODEL
+                        The averaged model to output (default:
+                        network_avg.pkl)
+  --count COUNT         Average the last n checkpoints (default: 6)
+```
+---
+```
 usage: align_images.py [-h] [--output_size OUTPUT_SIZE] [--x_scale X_SCALE]
                        [--y_scale Y_SCALE] [--em_scale EM_SCALE]
                        raw_dir aligned_dir
