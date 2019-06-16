@@ -23,16 +23,21 @@ What I've added:
 4) Added support for generating **videos** of the encoding process!
 5) Added learning rate decay, stochastic gradient clipping, and tiled dlatents from @Pender's StyleGAN encoder fork.
 6) Adding experimental support for FP16 and [TreeConnect](https://github.com/OliverRichter/TreeConnect).
-7) A [tutorial notebook](https://github.com/pbaylies/stylegan-encoder/blob/master/StyleGAN_Encoder_Tutorial.ipynb)!
-8) Follow @Puzer's instructions below for encoder usage, all of that still applies!
+7) Added support for masking and autogenerating face masks
+8) Merged support for conditional generation from @davidstap [StyleGAN fork](https://github.com/davidstap/stylegan)
+9) Added support for stochastic weight averaging of StyleGAN checkpoints
+10) A [tutorial notebook](https://github.com/pbaylies/stylegan-encoder/blob/master/StyleGAN_Encoder_Tutorial.ipynb)!
+11) Follow @Puzer's instructions below for encoder usage as well, all of that still applies!
 
 ```
-usage: encode_images.py [-h] [--data_dir DATA_DIR] [--load_last LOAD_LAST]
+usage: encode_images.py [-h] [--data_dir DATA_DIR] [--mask_dir MASK_DIR]
+                        [--load_last LOAD_LAST] [--dlatent_avg DLATENT_AVG]
                         [--model_url MODEL_URL] [--model_res MODEL_RES]
                         [--batch_size BATCH_SIZE] [--image_size IMAGE_SIZE]
                         [--resnet_image_size RESNET_IMAGE_SIZE] [--lr LR]
                         [--decay_rate DECAY_RATE] [--iterations ITERATIONS]
                         [--decay_steps DECAY_STEPS]
+                        [--load_effnet LOAD_EFFNET]
                         [--load_resnet LOAD_RESNET]
                         [--use_vgg_loss USE_VGG_LOSS]
                         [--use_vgg_layer USE_VGG_LAYER]
@@ -43,6 +48,8 @@ usage: encode_images.py [-h] [--data_dir DATA_DIR] [--load_last LOAD_LAST]
                         [--randomize_noise RANDOMIZE_NOISE]
                         [--tile_dlatents TILE_DLATENTS]
                         [--clipping_threshold CLIPPING_THRESHOLD]
+                        [--load_mask LOAD_MASK] [--face_mask FACE_MASK]
+                        [--use_grabcut USE_GRABCUT] [--scale_mask SCALE_MASK]
                         [--video_dir VIDEO_DIR] [--output_video OUTPUT_VIDEO]
                         [--video_codec VIDEO_CODEC]
                         [--video_frame_rate VIDEO_FRAME_RATE]
@@ -81,12 +88,86 @@ optional arguments:
   --randomize_noise RANDOMIZE_NOISE       Add noise to dlatents during optimization (default: False)
   --tile_dlatents TILE_DLATENTS           Tile dlatents to use a single vector at each scale (default: False)
   --clipping_threshold CLIPPING_THRESHOLD Stochastic clipping of gradient values outside of this threshold (default: 2.0)
+  --load_mask LOAD_MASK Load segmentation masks (default: False)
+  --face_mask FACE_MASK Generate a mask for predicting only the face area (default: False)
+  --use_grabcut USE_GRABCUT Use grabcut algorithm on the face mask to better segment the foreground (default: True)
+  --scale_mask SCALE_MASK Look over a wider section of foreground for grabcut (default: 1.5)
   --video_dir VIDEO_DIR                   Directory for storing training videos (default: videos)
   --output_video OUTPUT_VIDEO             Generate videos of the optimization process (default: False)
   --video_codec VIDEO_CODEC               FOURCC-supported video codec name (default: MJPG)
   --video_frame_rate VIDEO_FRAME_RATE     Video frames per second (default: 24)
   --video_size VIDEO_SIZE                 Video size in pixels (default: 512)
   --video_skip VIDEO_SKIP                 Only write every n frames (1 = write every frame) (default: 1)
+```
+---
+```
+usage: train_effnet.py [-h] [--model_url MODEL_URL] [--model_res MODEL_RES]
+                       [--data_dir DATA_DIR] [--model_path MODEL_PATH]
+                       [--model_depth MODEL_DEPTH] [--model_size MODEL_SIZE]
+                       [--use_ktrain USE_KTRAIN]
+                       [--ktrain_max_lr KTRAIN_MAX_LR]
+                       [--ktrain_reduce_lr KTRAIN_REDUCE_LR]
+                       [--ktrain_stop_early KTRAIN_STOP_EARLY]
+                       [--activation ACTIVATION] [--optimizer OPTIMIZER]
+                       [--loss LOSS] [--use_fp16 USE_FP16]
+                       [--image_size IMAGE_SIZE] [--batch_size BATCH_SIZE]
+                       [--test_size TEST_SIZE] [--truncation TRUNCATION]
+                       [--fancy_truncation FANCY_TRUNCATION]
+                       [--max_patience MAX_PATIENCE]
+                       [--freeze_first FREEZE_FIRST] [--epochs EPOCHS]
+                       [--minibatch_size MINIBATCH_SIZE] [--seed SEED]
+                       [--loop LOOP]
+
+Train an EfficientNet to predict latent representations of images in a
+StyleGAN model from generated examples
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --model_url MODEL_URL
+                        Fetch a StyleGAN model to train on from this URL
+                        (default: https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ)
+  --model_res MODEL_RES
+                        The dimension of images in the StyleGAN model (default: 1024)
+  --data_dir DATA_DIR   Directory for storing the EfficientNet model (default: data)
+  --model_path MODEL_PATH
+                        Save / load / create the EfficientNet model with this file path (default: data/finetuned_effnet.h5)
+  --model_depth MODEL_DEPTH
+                        Number of TreeConnect layers to add after EfficientNet (default: 1)
+  --model_size MODEL_SIZE
+                        Model size - 0 - small, 1 - medium, 2 - large, or 3 - full size. (default: 1)
+  --use_ktrain USE_KTRAIN
+                        Use ktrain for training (default: False)
+  --ktrain_max_lr KTRAIN_MAX_LR
+                        Maximum learning rate for ktrain (default: 0.001)
+  --ktrain_reduce_lr KTRAIN_REDUCE_LR
+                        Patience for reducing learning rate after a plateau
+                        for ktrain (default: 1)
+  --ktrain_stop_early KTRAIN_STOP_EARLY
+                        Patience for early stopping for ktrain (default: 3)
+  --activation ACTIVATION
+                        Activation function to use after EfficientNet (default: elu)
+  --optimizer OPTIMIZER Optimizer to use (default: adam)
+  --loss LOSS           Loss function to use (default: logcosh)
+  --use_fp16 USE_FP16   Use 16-bit floating point (default: False)
+  --image_size IMAGE_SIZE
+                        Size of images for EfficientNet model (default: 256)
+  --batch_size BATCH_SIZE
+                        Batch size for training the EfficientNet model (default: 2048)
+  --test_size TEST_SIZE
+                        Batch size for testing the EfficientNet model (default: 512)
+  --truncation TRUNCATION
+                        Generate images using truncation trick (default: 0.7)
+  --fancy_truncation FANCY_TRUNCATION
+                        Use fancier truncation proposed by @oneiroid (default: True)
+  --max_patience MAX_PATIENCE
+                        Number of iterations to wait while test loss does not improve (default: 2)
+  --freeze_first FREEZE_FIRST
+                        Start training with the pre-trained network frozen, then unfreeze (default: False)
+  --epochs EPOCHS       Number of training epochs to run for each batch (default: 2)
+  --minibatch_size MINIBATCH_SIZE
+                        Size of minibatches for training and generation (default: 16)
+  --seed SEED           Pick a random seed for reproducibility (-1 for no random seed selected) (default: -1)
+  --loop LOOP           Run this many iterations (-1 for infinite, halt with CTRL-C) (default: -1)
 ```
 ---
 ```
@@ -126,54 +207,6 @@ optional arguments:
                         Batch size for training the ResNet model (default: 2048)
   --test_size TEST_SIZE
                         Batch size for testing the ResNet model (default: 512)
-  --max_patience MAX_PATIENCE
-                        Number of iterations to wait while test loss does not improve (default: 2)
-  --freeze_first FREEZE_FIRST
-                        Start training with the pre-trained network frozen, then unfreeze (default: False)
-  --epochs EPOCHS       Number of training epochs to run for each batch (default: 2)
-  --minibatch_size MINIBATCH_SIZE
-                        Size of minibatches for training and generation (default: 16)
-  --seed SEED           Pick a random seed for reproducibility (-1 for no random seed selected) (default: -1)
-  --loop LOOP           Run this many iterations (-1 for infinite, halt with CTRL-C) (default: -1)
-```
----
-```
-usage: train_effnet.py [-h] [--model_url MODEL_URL] [--model_res MODEL_RES]
-                       [--data_dir DATA_DIR] [--model_path MODEL_PATH]
-                       [--model_depth MODEL_DEPTH] [--model_size MODEL_SIZE]
-                       [--activation ACTIVATION] [--use_fp16 USE_FP16]
-                       [--image_size IMAGE_SIZE] [--batch_size BATCH_SIZE]
-                       [--test_size TEST_SIZE] [--max_patience MAX_PATIENCE]
-                       [--freeze_first FREEZE_FIRST] [--epochs EPOCHS]
-                       [--minibatch_size MINIBATCH_SIZE] [--seed SEED]
-                       [--loop LOOP]
-
-Train an EfficientNet to predict latent representations of images in a
-StyleGAN model from generated examples
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --model_url MODEL_URL
-                        Fetch a StyleGAN model to train on from this URL
-                        (default: https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ)
-  --model_res MODEL_RES
-                        The dimension of images in the StyleGAN model (default: 1024)
-  --data_dir DATA_DIR   Directory for storing the EfficientNet model (default: data)
-  --model_path MODEL_PATH
-                        Save / load / create the EfficientNet model with this file path (default: data/finetuned_effnet.h5)
-  --model_depth MODEL_DEPTH
-                        Number of TreeConnect layers to add after EfficientNet (default: 1)
-  --model_size MODEL_SIZE
-                        Model size - 0 - small, 1 - medium, 2 - large, or 3 - full size. (default: 1)
-  --activation ACTIVATION
-                        Activation function to use after EfficientNet (default: elu)
-  --use_fp16 USE_FP16   Use 16-bit floating point (default: False)
-  --image_size IMAGE_SIZE
-                        Size of images for EfficientNet model (default: 256)
-  --batch_size BATCH_SIZE
-                        Batch size for training the EfficientNet model (default: 2048)
-  --test_size TEST_SIZE
-                        Batch size for testing the EfficientNet model (default: 512)
   --max_patience MAX_PATIENCE
                         Number of iterations to wait while test loss does not improve (default: 2)
   --freeze_first FREEZE_FIRST
