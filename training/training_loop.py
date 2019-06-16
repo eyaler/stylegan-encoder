@@ -68,7 +68,9 @@ def training_schedule(
     D_lrate_dict            = {},       # Resolution-specific overrides.
     lrate_rampup_kimg       = 0,        # Duration of learning rate ramp-up.
     tick_kimg_base          = 160,      # Default interval of progress snapshots.
-    tick_kimg_dict          = {4: 160, 8:140, 16:120, 32:100, 64:80, 128:60, 256:40, 512:30, 1024:20}): # Resolution-specific overrides.
+    tick_kimg_dict          = {4: 160, 8:140, 16:120, 32:100, 64:80, 128:60, 256:40, 512:30, 1024:20}, # Resolution-specific overrides.
+    restore_partial_fn      = None      # Filename of to be restored network
+    ):
 
     # Initialize result dict.
     s = dnnlib.EasyDict()
@@ -147,10 +149,36 @@ def training_loop(
 
     # Construct networks.
     with tf.device('/gpu:0'):
+        # Load pre-trained
         if resume_run_id is not None:
-            network_pkl = misc.locate_network_pkl(resume_run_id, resume_snapshot)
-            print('Loading networks from "%s"...' % network_pkl)
-            G, D, Gs = misc.load_pkl(network_pkl)
+            if resume_run_id == 'latest':
+                network_pkl, resume_kimg = misc.locate_latest_pkl()
+                print('Loading networks from "%s"...' % network_pkl)
+                G, D, Gs = misc.load_pkl(network_pkl)
+
+            elif resume_run_id == 'restore_partial':
+                print('Restore partially...')
+                # Initialize networks
+                G = tflib.Network('G', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **G_args)
+                D = tflib.Network('D', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **D_args)
+                Gs = G.clone('Gs')
+
+                # Load pre-trained networks
+                assert restore_partial_fn != None
+                G_partial, D_partial, Gs_partial = pickle.load(open(restore_partial_fn, 'rb'))
+
+                # Restore (subset of) pre-trained weights
+                # (only parameters that match both name and shape)
+                G.copy_compatible_trainables_from(G_partial)
+                D.copy_compatible_trainables_from(D_partial)
+                Gs.copy_compatible_trainables_from(Gs_partial)
+
+            else:
+                network_pkl = misc.locate_network_pkl(resume_run_id, resume_snapshot)
+                print('Loading networks from "%s"...' % network_pkl)
+                G, D, Gs = misc.load_pkl(network_pkl)
+
+        # Start from scratch
         else:
             print('Constructing networks...')
             G = tflib.Network('G', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **G_args)
