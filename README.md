@@ -8,7 +8,7 @@
 
 ![Example image](./mona_example.jpg)
 
-From left to right: original image, predicted image from a ResNet pretrained on generated StyleGAN faces, and the final encoded image.
+From left to right: original image, predicted image from a ResNet trained on generated StyleGAN faces, and the final encoded image.
 
 What I've added:
 
