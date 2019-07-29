@@ -52,3 +52,4 @@ if __name__ == "__main__":
             face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], i)
             aligned_face_path = os.path.join(ALIGNED_IMAGES_DIR, face_img_name)
             image_align(raw_img_path, aligned_face_path, face_landmarks, output_size=args.output_size, x_scale=args.x_scale, y_scale=args.y_scale, em_scale=args.em_scale, alpha=args.use_alpha)
+            print('Wrote result %s' % aligned_face_path)
