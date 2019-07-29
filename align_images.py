@@ -41,17 +41,14 @@ if __name__ == "__main__":
 
     landmarks_detector = LandmarksDetector(landmarks_model_path)
     for img_name in os.listdir(RAW_IMAGES_DIR):
+        print('Aligning %s ...' % img_name)
         raw_img_path = os.path.join(RAW_IMAGES_DIR, img_name)
-        try:
-            fn = face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], 1)
-            if os.path.isfile(fn):
-                continue
-            for i, face_landmarks in enumerate(landmarks_detector.get_landmarks(raw_img_path), start=1):
-                try:
-                    face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], i)
-                    aligned_face_path = os.path.join(ALIGNED_IMAGES_DIR, face_img_name)
-                    image_align(raw_img_path, aligned_face_path, face_landmarks, output_size=args.output_size, x_scale=args.x_scale, y_scale=args.y_scale, em_scale=args.em_scale, alpha=args.use_alpha)
-                except:
-                    print("Exception in face alignment!")
-        except:
-            print("Exception in landmark detection!")
+        fn = face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], 1)
+        if os.path.isfile(fn):
+            continue
+        print('Getting landmarks...')
+        for i, face_landmarks in enumerate(landmarks_detector.get_landmarks(raw_img_path), start=1):
+            print('Starting face alignment...')
+            face_img_name = '%s_%02d.png' % (os.path.splitext(img_name)[0], i)
+            aligned_face_path = os.path.join(ALIGNED_IMAGES_DIR, face_img_name)
+            image_align(raw_img_path, aligned_face_path, face_landmarks, output_size=args.output_size, x_scale=args.x_scale, y_scale=args.y_scale, em_scale=args.em_scale, alpha=args.use_alpha)
