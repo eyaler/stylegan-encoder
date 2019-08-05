@@ -355,7 +355,9 @@ class Network:
             if name in src_net.trainables and self.trainables[name].shape == src_net.trainables[name].shape:
                 names.append(name)
 
-        tfutil.set_vars(tfutil.run({self.vars[name]: (src_net.vars[name] * epoch + self.vars[name])/(epoch + 1) for name in names}))
+        scale_new_data = 1.0 / (epoch + 1)
+        scale_moving_average = (1.0 - scale_new_data)
+        tfutil.set_vars(tfutil.run({self.vars[name]: (src_net.vars[name] * scale_new_data + self.vars[name] * scale_moving_average) for name in names}))
 
     def convert(self, new_func_name: str, new_name: str = None, **new_static_kwargs) -> "Network":
         """Create new network with the given parameters, and copy all variables from this network."""
