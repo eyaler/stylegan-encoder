@@ -12,7 +12,6 @@ class LandmarksDetector:
     def get_landmarks(self, image):
         img = dlib.load_rgb_image(image)
         dets = self.detector(img, 1)
-
         for detection in dets:
             try:
                 face_landmarks = [(item.x, item.y) for item in self.shape_predictor(img, detection).parts()]

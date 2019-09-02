@@ -4,7 +4,7 @@ import os
 import PIL.Image
 
 
-def image_align(src_file, dst_file, face_landmarks, output_size=1024, transform_size=4096, enable_padding=True, x_scale=1, y_scale=1, em_scale=0.1, alpha=False):
+def image_align(src_file, dst_file, face_landmarks, output_size=1024, transform_size=4096, enable_padding=True, x_scale=1, y_scale=1, em_scale=0.1, alpha=False, find_faces=True):
         # Align function from FFHQ dataset pre-processing step
         # https://github.com/NVlabs/ffhq-dataset/blob/master/download_ffhq.py
 
@@ -35,15 +35,26 @@ def image_align(src_file, dst_file, face_landmarks, output_size=1024, transform_
         x *= max(np.hypot(*eye_to_eye) * 2.0, np.hypot(*eye_to_mouth) * 1.8)
         x *= x_scale
         y = np.flipud(x) * [-y_scale, y_scale]
+
+
+
         c = eye_avg + eye_to_mouth * em_scale
         quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
         qsize = np.hypot(*x) * 2
+
 
         # Load in-the-wild image.
         if not os.path.isfile(src_file):
             print('\nCannot find source image. Please run "--wilds" before "--align".')
             return
-        img = PIL.Image.open(src_file)
+        img = PIL.Image.open(src_file).convert('RGBA').convert('RGB')
+
+        if not find_faces:
+            width, height = img.size
+            c0, c1 = width//2, height//2
+            width = height
+            quad = np.asarray([[c0-width//2,c1-height//2], [c0-width//2,c1+height//2], [c0+width//2,c1+height//2], [c0+width//2,c1-height//2]])
+            qsize = np.sqrt(width**2/2+height**2/2)
 
         # Shrink.
         shrink = int(np.floor(qsize / output_size * 0.5))
@@ -66,7 +77,7 @@ def image_align(src_file, dst_file, face_landmarks, output_size=1024, transform_
         pad = (max(-pad[0] + border, 0), max(-pad[1] + border, 0), max(pad[2] - img.size[0] + border, 0), max(pad[3] - img.size[1] + border, 0))
         if enable_padding and max(pad) > border - 4:
             pad = np.maximum(pad, int(np.rint(qsize * 0.3)))
-            img = np.pad(np.float32(img), ((pad[1], pad[3]), (pad[0], pad[2]), (0, 0)), 'reflect')
+            img = np.pad(np.float32(img), ((pad[1], pad[3]), (pad[0], pad[2]), (0, 0)), 'edge')
             h, w, _ = img.shape
             y, x, _ = np.ogrid[:h, :w, :1]
             mask = np.maximum(1.0 - np.minimum(np.float32(x) / pad[0], np.float32(w-1-x) / pad[2]), 1.0 - np.minimum(np.float32(y) / pad[1], np.float32(h-1-y) / pad[3]))
@@ -78,7 +89,7 @@ def image_align(src_file, dst_file, face_landmarks, output_size=1024, transform_
                 mask = 1-np.clip(3.0 * mask, 0.0, 1.0)
                 mask = np.uint8(np.clip(np.rint(mask*255), 0, 255))
                 img = np.concatenate((img, mask), axis=2)
-                img = PIL.Image.fromarray(img, 'RGBA')
+                img = PIL.Image.fromarray(img, 'RGB')
             else:
                 img = PIL.Image.fromarray(img, 'RGB')
             quad += pad[:2]
